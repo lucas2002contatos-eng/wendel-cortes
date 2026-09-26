@@ -12,6 +12,7 @@ import * as Linking from "expo-linking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
+import { WebFrame } from "@/src/components/web-frame";
 import { queryClient } from "@/src/query-client";
 import { colors } from "@/src/theme";
 
@@ -83,12 +84,14 @@ export default function RootLayout() {
           <QueryClientProvider client={queryClient}>
             <KeyboardProvider>
               <StatusBar style="light" />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: colors.surface },
-                }}
-              />
+              <WebFrame>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: colors.surface },
+                  }}
+                />
+              </WebFrame>
             </KeyboardProvider>
           </QueryClientProvider>
         </ErrorBoundary>

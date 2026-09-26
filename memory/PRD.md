@@ -19,6 +19,7 @@ Aplicativo mobile de gestão para barbearia com dois perfis (cliente e admin/bar
 9. Painel Mensalistas com filtros (ativos, pgto pendente, expirados, cancelados, 0/1/2/3/4 cortes restantes) e marcar pago manual.
 10. Financeiro: hoje/semana/mês, por método de pagamento.
 11. Push notifications (Emergent managed) — estrutura pronta; envia após agendamento, entrada na fila, chamada de próximo. `EMERGENT_PUSH_KEY=placeholder` (real após deploy).
+12. Versão Web (site): mesmo código roda no navegador. Em telas ≥768px o app é centralizado em coluna de 520px com marca lateral (`src/components/web-frame.tsx`); em mobile web ocupa largura total. Título do navegador "Wendel Cortes — Barbearia". Testado E2E (iteration_1).
 
 ## Credenciais
 - Admin: `admin@wendelcortes.com` / `admin123`

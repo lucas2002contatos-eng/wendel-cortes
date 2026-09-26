@@ -1,0 +1,44 @@
+{
+  "summary": "First E2E frontend web test for 'WENDEL CORTES' barbershop app (Expo web). Tested WebFrame wrapper on desktop (1366x800) and mobile (390x844). All flows pass: browser title 'Wendel Cortes — Barbearia' is set; desktop shows centered 520px column with WENDEL/CORTES side branding + 'AGENDAMENTOS · FILA · CLIENTE MENSAL' tagline; mobile is full-width with no side branding. Client login (carlos@test.com), navigation across all 5 tabs (Início, Agendar, Fila, Mensal, Perfil) works with real data; end-to-end booking flow succeeds (Corte → 2026-10-07 → 15:30 → PIX → Confirmar): success text 'Agendamento confirmado!' shows, wa.me link opens in new tab, and the booking appears in Perfil > Próximos Atendimentos. Fila (client) shows the user already at position 1º with queue list. Admin login (admin@wendelcortes.com) lands on Dashboard with live metrics (Faturamento R$ 45.00, 3 agendamentos, 4 na fila, 4 mensalistas ativos); admin tabs Agenda, Fila, Mensalistas, Mais all render populated data. Zero JS runtime errors captured in any flow.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/tmp/desktop_initial.png",
+    "/tmp/client_home.png",
+    "/tmp/tab_Agendar.png",
+    "/tmp/tab_Fila.png",
+    "/tmp/tab_Mensal.png",
+    "/tmp/tab_Perfil.png",
+    "/tmp/agendar_slot.png",
+    "/tmp/agendar_confirmed.png",
+    "/tmp/admin_dashboard.png",
+    "/tmp/admin_Agenda.png",
+    "/tmp/admin_Fila.png",
+    "/tmp/admin_Mensalistas.png",
+    "/tmp/mobile_login.png",
+    "/tmp/mobile_home.png",
+    "/tmp/mobile_agendar.png",
+    "/tmp/mobile_fila.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "web-frame.tsx cleanly gates on Platform.OS==='web' && width>=768; native path is a pure pass-through — good, no regression risk for iOS/Android builds.",
+    "Sets document.title and body backgroundColor in a useEffect guarded by typeof document !== 'undefined' — safe for SSR/native.",
+    "FRAME_MAX_WIDTH=520 gives comfortable mobile-like column on desktop; side branding column uses flex:1 with paddingRight so it scales on wider screens (verified at 1366px).",
+    "No hardcoded URLs; frontend uses EXPO_BACKEND_URL correctly (login/agendar/fila/dashboard all round-trip through /api).",
+    "All key interactive elements expose data-testid (login-*, svc-*, date-*, slot-*, pay-*, confirm-btn, qa-*) — excellent testability.",
+    "Minor cosmetic: two identical 'WENDEL CORTES' brand blocks (side + inside frame) on the login screen at desktop, which is intentional but slightly redundant visually — no functional issue."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped as requested)", "frontend": "100%"},
+  "seed_data_creation": "None — used existing seed users (Carlos, João, Rafael, Marcos, Lucas) and admin. Booking flow created one extra appointment for Carlos on 2026-10-07 15:30 (PIX, pending payment), visible in Perfil.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login testIDs: login-email-input, login-password-input, login-submit-button. Client quick-actions: qa-agendar/qa-fila/qa-mensal/qa-perfil. Agendar screen testIDs: svc-<Service>, date-YYYY-MM-DD, slot-HH:MM, pay-pix|cartao|dinheiro|mensal, confirm-btn. Admin tabs have no testIDs — use page.get_by_text('Agenda'|'Fila'|'Mensalistas'|'Mais'|'Dashboard').last with force=True. Confirm booking opens wa.me in a popup (api.whatsapp.com) — attach page.context.on('page', ...) if you want to capture it. Desktop breakpoint is 768px; mobile viewport (390x844) hides side branding. Seeded queue is already populated with 4 clients (Carlos at position 1) so 'Sair da fila' button is what a joined client sees.",
+  "rca_of_issue": "N/A — no bugs found. Feature works end-to-end on both desktop web and mobile web viewports."
+}
