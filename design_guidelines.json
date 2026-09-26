@@ -1,0 +1,178 @@
+{
+  "app_name": "WENDEL CORTES",
+  "personality": "6 Glass / Luxe DARK",
+  "personality_one_liner": "An exclusively masculine, deeply elegant, and strictly professional experience using cinematic depth, muted lighting, and distinct champagne-gold accents.",
+  "color": {
+    "surface": "#0a0a0a",
+    "onSurface": "#fcfcfc",
+    "surfaceSecondary": "#161618",
+    "onSurfaceSecondary": "#ececec",
+    "surfaceTertiary": "#212124",
+    "onSurfaceTertiary": "#e0e0e0",
+    "surfaceInverse": "#f8f8f8",
+    "onSurfaceInverse": "#0a0a0a",
+    "brand": "#d4af37",
+    "brandPrimary": "#d4af37",
+    "onBrandPrimary": "#0a0a0a",
+    "brandSecondary": "#c5a059",
+    "onBrandSecondary": "#0a0a0a",
+    "brandTertiary": "#33280c",
+    "onBrandTertiary": "#d4af37",
+    "success": "#3b5e40",
+    "onSuccess": "#cce5d0",
+    "warning": "#8f6c24",
+    "onWarning": "#ffe299",
+    "error": "#6e2c2c",
+    "onError": "#ffbaba",
+    "info": "#2a3f54",
+    "onInfo": "#c4dcf2",
+    "border": "#2a2a2c",
+    "borderStrong": "#3f3f42",
+    "divider": "#1e1e20",
+    "muted": "#8e8e93"
+  },
+  "typography": {
+    "displayFontFamily": "Cormorant Garamond",
+    "textFontFamily": "Geist",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Maintain a strict 8pt grid system. Use generous padding for an elevated and uncrowded luxury feel.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use for sticky headers over scrolling content.",
+      "Use for the bottom tab bar.",
+      "Use as a frosted overlay on the featured image/hero card (e.g., membership/subscription card)."
+    ],
+    "dont's": [
+      "Do not blur standard form fields or text regions.",
+      "Do not use on every list item; keep it for elevated navigation or hero surfaces."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "haptics": {
+    "events": {
+      "button_press": "light",
+      "tab_change": "light",
+      "service_selection": "medium",
+      "queue_join": "success",
+      "subscription_claim": "success",
+      "admin_drag_drop": "medium",
+      "admin_call_next": "heavy"
+    }
+  },
+  "screens": [
+    {
+      "name": "Cliente_Home",
+      "purpose": "Dashboard for clients to start a booking, see their active queue status, or check subscription balance.",
+      "states": {
+        "loading": "Dark skeleton loaders simulating cards.",
+        "empty": "No upcoming appointments. Show an elegant empty state with 'Reservar Horário' CTA.",
+        "error": "Failed to load dashboard data. Retry button."
+      },
+      "layout": "Large cinematic hero card for 'Cliente Mensal' with blurred background (showing cuts remaining). Below, a quick horizontal scroll of popular services. If the user is in the 'Fila' (queue), show a notched-ticket style sticky card at the top with real-time position."
+    },
+    {
+      "name": "Cliente_Fila",
+      "purpose": "Live queue tracking screen showing the client's position and estimated wait time.",
+      "states": {
+        "loading": "Spinner centered on screen.",
+        "empty": "Not currently in any queue. Show a prompt to join today's queue (if 'Fila' is active for the day).",
+        "error": "Could not fetch queue status."
+      },
+      "layout": "Use a stylized ticket motif for the active queue status. Huge tabular numeric typography for the position number. Use a progress indicator. A secondary button to 'Leave Queue'."
+    },
+    {
+      "name": "Cliente_Agendar",
+      "purpose": "Service selection, calendar picker, and checkout.",
+      "states": {
+        "loading": "Skeleton loaders for services.",
+        "empty": "No available slots.",
+        "error": "Failed to fetch slots."
+      },
+      "layout": "List of services with real photography. Once selected, move to an inline calendar (use tabular numeric fonts) and slot selection. Sticky 'Confirmar' button at the bottom. Payment selection (PIX, Cartão, Dinheiro)."
+    },
+    {
+      "name": "Admin_Dashboard",
+      "purpose": "Data-heavy daily overview for the barber/admin.",
+      "states": {
+        "loading": "Skeleton UI for metric cards.",
+        "empty": "No data for today.",
+        "error": "Failed to fetch metrics."
+      },
+      "layout": "Top section: High-level KPI cards (Total Revenue, Cuts Today, Subscriptions Active) using 'brandTertiary' subtle tints. Below: A list of upcoming appointments. Bottom nav changes for Admin."
+    },
+    {
+      "name": "Admin_Fila",
+      "purpose": "Manage the live walk-in queue.",
+      "states": {
+        "loading": "Spinner.",
+        "empty": "Queue is currently empty.",
+        "error": "Could not load queue."
+      },
+      "layout": "Draggable list of cards (surfaceSecondary) representing waiting clients. Each card has customer name, requested service, and wait time. Prominent 'Chamar Próximo' (Call Next) CTA. Clear status badges."
+    }
+  ],
+  "images": {
+    "hero_interior": {
+      "url": "https://images.unsplash.com/photo-1726835498689-b4f6dbcdbdfb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwxfHxwcmVtaXVtJTIwYmFyYmVyc2hvcCUyMGRhcmslMjBpbnRlcmlvcnxlbnwwfHx8fDE3OTAzOTI3MDl8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Dark premium barbershop interior"
+    },
+    "service_corte": {
+      "url": "https://images.unsplash.com/photo-1605497788044-5a32c7078486?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwxfHxiYXJiZXIlMjBjdXR0aW5nJTIwaGFpciUyMGZhZGV8ZW58MHx8fHwxNzkwMzkyNzA5fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Barber cutting hair fade"
+    },
+    "service_barba": {
+      "url": "https://images.unsplash.com/photo-1647140655214-e4a2d914971f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwxfHxiYXJiZXIlMjB0cmltbWluZyUyMGJlYXJkJTIwY2xvc2UlMjB1cHxlbnwwfHx8fDE3OTAzOTI3MDl8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Barber trimming beard close up"
+    },
+    "service_limpeza": {
+      "url": "https://images.unsplash.com/photo-1542848284-8afa78a08ccb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwxfHxtZW5zJTIwc2tpbiUyMGNhcmUlMjBmYWNpYWwlMjBtYXNzYWdlfGVufDB8fHx8MTc5MDM5MjcwOXww&ixlib=rb-4.1.0&q=85",
+      "alt": "Mens skin care facial massage"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the Dark Luxe aesthetic. Do not use generic AI purples, blues, or indigos. Stick entirely to the provided Midnight Black/Charcoal with Gold/Champagne accents.",
+    "Implement the 'Cliente Mensal' subscription as a luxurious hero card with a frosted glass overlay and a prominent counter (e.g., 2/4 cuts remaining).",
+    "For the live queue tracking ('Fila'), implement a notched-ticket shape or styling motif. Use tabular numeric fonts for the position tracker to prevent shifting.",
+    "Ensure the bottom navigation has distinct routing per user role: Client (Início, Agendar, Fila, Mensal, Perfil) vs Admin (Dashboard, Agenda, Fila, Clientes, Mais).",
+    "Admin dashboards should prioritize high-density glanceability without losing the premium feel. Use hairline borders (0.5/1pt) and very subtle tints for data cards rather than heavy shadows.",
+    "When displaying text over imagery (e.g., on the hero card or service photos), you MUST use a vertical gradient scrim (transparent to surfaceInverse) to guarantee WCAG AA readability.",
+    "Do NOT use emojis anywhere in the app UI. Rely on the elegant 'Feather' icon set."
+  ]
+}

@@ -1,0 +1,91 @@
+import { useCallback, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Icon from "@react-native-vector-icons/feather";
+import { colors, spacing, radius } from "@/src/theme";
+import { api, clearSession, getUser } from "@/src/api";
+import { Badge, GhostButton, STATUS_LABELS, statusTone } from "@/src/ui";
+
+export default function Perfil() {
+  const insets = useSafeAreaInsets();
+  const [user, setUser] = useState<any>(null);
+  const [apts, setApts] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
+
+  const load = useCallback(async () => {
+    const u = await getUser(); setUser(u);
+    try { setApts(await api("/appointments/me")); } catch {}
+  }, []);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const logout = async () => { await clearSession(); router.replace("/(auth)/login"); };
+  const cancel = async (id: string) => {
+    try { await api(`/appointments/${id}/cancel`, { method: "POST" }); await load(); }
+    catch (e: any) { alert(e.message); }
+  };
+
+  const upcoming = apts.filter((a) => !["cancelado", "concluido", "nao_compareceu"].includes(a.status));
+  const history = apts.filter((a) => ["cancelado", "concluido", "nao_compareceu"].includes(a.status));
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.surface }}>
+      <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: spacing["3xl"], paddingHorizontal: spacing.xl }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.brandPrimary} />}>
+        <View style={styles.head}>
+          <View style={styles.avatar}><Text style={styles.avatarTxt}>{user?.name?.[0] || "?"}</Text></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.name}>{user?.name}</Text>
+            <Text style={styles.meta}>{user?.phone}</Text>
+            <Text style={styles.meta}>{user?.email}</Text>
+          </View>
+        </View>
+
+        <Text style={styles.sec}>Próximos atendimentos</Text>
+        {upcoming.length === 0 ? <Text style={styles.empty}>Nenhum agendamento futuro.</Text> :
+          upcoming.map((a) => (
+            <View key={a.id} style={styles.apt}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.aptSvc}>{a.service_name}</Text>
+                <Text style={styles.aptMeta}>{a.date} · {a.time} · R$ {Number(a.price).toFixed(2)}</Text>
+                <View style={{ marginTop: 6 }}><Badge label={STATUS_LABELS[a.status]} tone={statusTone(a.status)} /></View>
+              </View>
+              <Pressable testID={`cancel-${a.id}`} onPress={() => cancel(a.id)} style={styles.cancelBtn}>
+                <Icon name="x" size={16} color={colors.onError} />
+              </Pressable>
+            </View>
+          ))
+        }
+
+        <Text style={styles.sec}>Histórico</Text>
+        {history.length === 0 ? <Text style={styles.empty}>Sem histórico ainda.</Text> :
+          history.map((a) => (
+            <View key={a.id} style={styles.apt}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.aptSvc}>{a.service_name}{a.used_mensal ? "  ·  Mensal" : ""}</Text>
+                <Text style={styles.aptMeta}>{a.date} · {a.time} · R$ {Number(a.price).toFixed(2)}</Text>
+                <View style={{ marginTop: 6 }}><Badge label={STATUS_LABELS[a.status]} tone={statusTone(a.status)} /></View>
+              </View>
+            </View>
+          ))
+        }
+
+        <GhostButton testID="logout-btn" label="Sair" onPress={logout} style={{ marginTop: spacing.xl }} />
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  head: { flexDirection: "row", alignItems: "center", gap: spacing.lg, marginBottom: spacing.xl },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
+  avatarTxt: { color: colors.onBrandPrimary, fontSize: 28, fontWeight: "800" },
+  name: { color: colors.onSurface, fontSize: 20, fontWeight: "700" },
+  meta: { color: colors.muted, fontSize: 13, marginTop: 2 },
+  sec: { color: colors.muted, fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase", marginTop: spacing.xl, marginBottom: spacing.md },
+  empty: { color: colors.muted, fontStyle: "italic" },
+  apt: { flexDirection: "row", alignItems: "center", padding: spacing.lg, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, gap: spacing.md, marginBottom: spacing.sm },
+  aptSvc: { color: colors.onSurface, fontSize: 15, fontWeight: "700" },
+  aptMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
+  cancelBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
+});
