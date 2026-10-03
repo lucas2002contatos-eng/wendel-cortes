@@ -20,6 +20,16 @@ Aplicativo mobile de gestão para barbearia com dois perfis (cliente e admin/bar
 10. Financeiro: hoje/semana/mês, por método de pagamento.
 11. Push notifications (Emergent managed) — estrutura pronta; envia após agendamento, entrada na fila, chamada de próximo. `EMERGENT_PUSH_KEY=placeholder` (real após deploy).
 12. Versão Web (site): mesmo código roda no navegador. Em telas ≥768px o app é centralizado em coluna de 520px com marca lateral (`src/components/web-frame.tsx`); em mobile web ocupa largura total. Título do navegador "Wendel Cortes — Barbearia". Testado E2E (iteration_1).
+13. Página inicial pública (`app/index.tsx`), WhatsApp/endereço editáveis (Mais → Barbearia), layout desktop admin (sidebar + agenda/fila lado a lado), lembrete de presença (iteration_2).
+14. **Múltiplos barbeiros** (`backend/barbers.py` + `src/admin/*`, `app/(admin)/barbeiros.tsx`, `src/components/barber-picker.tsx`):
+    - Coleções: `barbers` {name, phone, photo_url, description, active, work_hours[7]{weekday,enabled,start,end}, commission_pct}, `barber_blocks` {barber_id,date,time,reason}, `barber_day_overrides` {barber_id,date,working,start?,end?}.
+    - Appointments/queue carregam `barber_id`/`barber_name`. Conflito só para o mesmo barbeiro (overlap por duração). Slots a cada 30 min dentro do horário do barbeiro.
+    - `GET /agenda/available/{d}?service_id&barber_id=any|id` → slots `{time, barber_id, barber_name}`; "any" balanceia por menor carga.
+    - Fila separada por barbeiro: `GET /queue/today` → `queues[]`; `POST /queue/join {service_id, barber_id|any}` (any = fila mais curta); concluir/não compareceu chama automaticamente o próximo da mesma fila.
+    - Cliente Mensal: corte reservado no agendamento (`used_mensal`), **consumido só ao concluir** (`mensal_consumed`), com `usage_history` detalhado (barbeiro, serviço, data, hora, ciclo).
+    - Admin: aba Barbeiros (Equipe / Escala do dia / Bloqueios), Agenda dos Barbeiros com filtro por barbeiro e visão Dia/Semana/Mês, Filas por barbeiro, Relatórios por barbeiro (Mais → Relatórios; `GET /admin/reports/barbers`).
+    - Logo oficial em `frontend/assets/images/logo.jpeg` (landing, login, web frame).
+    - Seed: barbeiros Wendel (Seg–Sáb 09–18) e João (Ter–Sáb 10–20); registros antigos migrados para Wendel.
 
 ## Credenciais
 - Admin: `admin@wendelcortes.com` / `admin123`

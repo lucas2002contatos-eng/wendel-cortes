@@ -5,8 +5,9 @@ import { useRouter } from "expo-router";
 import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
 import { api, getUser } from "@/src/api";
-import { GoldButton, Card, Badge } from "@/src/ui";
+import { GoldButton, Card } from "@/src/ui";
 import { openWhatsApp, bookingMsg } from "@/src/whatsapp";
+import { BarberPicker } from "@/src/components/barber-picker";
 
 function fmtDate(d: Date) {
   const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const dd = String(d.getDate()).padStart(2, "0");
@@ -19,9 +20,11 @@ export default function Agendar() {
   const [service, setService] = useState<any>(null);
   const [dates] = useState<Date[]>(() => Array.from({ length: 14 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; }));
   const [selDate, setSelDate] = useState<string | null>(null);
-  const [slots, setSlots] = useState<string[]>([]);
+  const [slots, setSlots] = useState<any[]>([]);
   const [mode, setMode] = useState<string>("agenda");
-  const [selSlot, setSelSlot] = useState<string | null>(null);
+  const [selSlot, setSelSlot] = useState<any>(null);
+  const [barbers, setBarbers] = useState<any[]>([]);
+  const [selBarber, setSelBarber] = useState<string | null>(null);
   const [payment, setPayment] = useState<string>("pix");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -34,32 +37,34 @@ export default function Agendar() {
       try {
         const s = await api("/services");
         setServices(s.filter((x: any) => x.active));
-        const su = await api("/subscription/me");
+        const [su, bs] = await Promise.all([api("/subscription/me"), api("/barbers")]);
         setSub(su);
+        setBarbers(bs);
       } catch {}
     })();
   }, []);
 
   useEffect(() => {
-    if (!service || !selDate) return;
+    if (!service || !selDate || !selBarber) return;
     setLoading(true); setSlots([]); setSelSlot(null);
-    api(`/agenda/available/${selDate}?service_id=${service.id}`)
+    api(`/agenda/available/${selDate}?service_id=${service.id}&barber_id=${selBarber}`)
       .then((r) => { setSlots(r.slots); setMode(r.mode); })
       .catch(() => setSlots([]))
       .finally(() => setLoading(false));
-  }, [service, selDate]);
+  }, [service, selDate, selBarber]);
 
   const canMensal = sub && sub.status === "active" && (sub.cuts_total - sub.cuts_used) > 0;
+  const selBarberName = selBarber === "any" ? null : barbers.find((b) => b.id === selBarber)?.name;
 
   const confirm = async () => {
     if (!service || !selDate || !selSlot) return;
     setErr(null); setMsg(null); setLoading(true);
     try {
-      await api("/appointments", { method: "POST", body: JSON.stringify({ service_id: service.id, date: selDate, time: selSlot, payment_method: payment }) });
-      setMsg("Agendamento confirmado!");
+      const apt = await api("/appointments", { method: "POST", body: JSON.stringify({ service_id: service.id, date: selDate, time: selSlot.time, payment_method: payment, barber_id: selSlot.barber_id }) });
+      setMsg(`Agendamento confirmado com ${apt.barber_name}!`);
       const u = await getUser();
       if (u?.phone) {
-        openWhatsApp(u.phone, bookingMsg(u.name, service.name, selDate, selSlot, payment));
+        openWhatsApp(u.phone, bookingMsg(u.name, service.name, selDate, selSlot.time, payment, apt.barber_name));
       }
       setTimeout(() => router.replace("/(client)/perfil"), 1200);
     } catch (e: any) { setErr(e.message); }
@@ -87,6 +92,13 @@ export default function Agendar() {
 
         {service && (
           <>
+            <Text style={styles.sec}>Escolha o barbeiro</Text>
+            <BarberPicker barbers={barbers} selected={selBarber} onSelect={(id) => { setSelBarber(id); setSelSlot(null); }} />
+          </>
+        )}
+
+        {service && selBarber && (
+          <>
             <Text style={styles.sec}>Data</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingRight: spacing.xl }}>
               {dates.map((d) => {
@@ -103,20 +115,24 @@ export default function Agendar() {
           </>
         )}
 
-        {selDate && (
+        {selDate && selBarber && (
           <>
-            <Text style={styles.sec}>Horário</Text>
+            <Text style={styles.sec}>Horário{selBarberName ? ` · ${selBarberName}` : " · Qualquer barbeiro"}</Text>
             {loading ? <ActivityIndicator color={colors.brandPrimary} /> : mode !== "agenda" ? (
               <Card><Text style={{ color: colors.onSurface }}>{mode === "fila" ? "Este dia está em modo FILA. Entre na fila pela aba Fila." : "Barbearia fechada neste dia."}</Text></Card>
             ) : slots.length === 0 ? (
-              <Text style={{ color: colors.muted }}>Nenhum horário disponível.</Text>
+              <Text style={{ color: colors.muted }}>{selBarberName ? `${selBarberName} não tem horários disponíveis neste dia.` : "Nenhum horário disponível."}</Text>
             ) : (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm }}>
-                {slots.map((t) => (
-                  <Pressable key={t} testID={`slot-${t}`} onPress={() => setSelSlot(t)} style={[styles.slot, selSlot === t && styles.slotSel]}>
-                    <Text style={[styles.slotTxt, selSlot === t && { color: colors.onBrandPrimary }]}>{t}</Text>
-                  </Pressable>
-                ))}
+                {slots.map((s) => {
+                  const sel = selSlot?.time === s.time;
+                  return (
+                    <Pressable key={s.time} testID={`slot-${s.time}`} onPress={() => setSelSlot(s)} style={[styles.slot, sel && styles.slotSel]}>
+                      <Text style={[styles.slotTxt, sel && { color: colors.onBrandPrimary }]}>{s.time}</Text>
+                      {selBarber === "any" && <Text style={[styles.slotBarber, sel && { color: colors.onBrandPrimary }]}>{s.barber_name}</Text>}
+                    </Pressable>
+                  );
+                })}
               </View>
             )}
           </>
@@ -124,6 +140,10 @@ export default function Agendar() {
 
         {selSlot && (
           <>
+            <View style={styles.summary}>
+              <Icon name="scissors" size={16} color={colors.brandPrimary} />
+              <Text style={styles.summaryTxt}>{service.name} · {selSlot.time} com <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>{selSlot.barber_name}</Text></Text>
+            </View>
             <Text style={styles.sec}>Pagamento</Text>
             <View style={{ gap: spacing.sm }}>
               {[
@@ -164,6 +184,9 @@ const styles = StyleSheet.create({
   slot: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.sm, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, minWidth: 74, alignItems: "center" },
   slotSel: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   slotTxt: { color: colors.onSurface, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  slotBarber: { color: colors.brandPrimary, fontSize: 10, marginTop: 2, fontWeight: "600" },
+  summary: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.xl, padding: spacing.md, backgroundColor: colors.surfaceSecondary, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+  summaryTxt: { color: colors.onSurface, fontSize: 13, flex: 1 },
   payRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
   payRowSel: { borderColor: colors.brandPrimary },
   payTxt: { color: colors.muted, fontSize: 14, fontWeight: "600" },

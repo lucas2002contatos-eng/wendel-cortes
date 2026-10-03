@@ -7,6 +7,8 @@ import { colors, spacing, radius } from "@/src/theme";
 import { api, clearSession, getUser } from "@/src/api";
 import { Badge, GhostButton, STATUS_LABELS, statusTone } from "@/src/ui";
 
+const fmtBr = (d?: string) => (d ? d.split("-").reverse().join("/") : "");
+
 export default function Perfil() {
   const insets = useSafeAreaInsets();
   const [user, setUser] = useState<any>(null);
@@ -47,7 +49,7 @@ export default function Perfil() {
             <View key={a.id} style={styles.apt}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.aptSvc}>{a.service_name}</Text>
-                <Text style={styles.aptMeta}>{a.date} · {a.time} · R$ {Number(a.price).toFixed(2)}</Text>
+                <Text style={styles.aptMeta}>{a.barber_name ? `com ${a.barber_name} · ` : ""}{fmtBr(a.date)} · {a.time} · R$ {Number(a.price).toFixed(2)}</Text>
                 <View style={{ marginTop: 6 }}><Badge label={STATUS_LABELS[a.status]} tone={statusTone(a.status)} /></View>
               </View>
               <Pressable testID={`cancel-${a.id}`} onPress={() => cancel(a.id)} style={styles.cancelBtn}>
@@ -62,9 +64,12 @@ export default function Perfil() {
           history.map((a) => (
             <View key={a.id} style={styles.apt}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.aptSvc}>{a.service_name}{a.used_mensal ? "  ·  Mensal" : ""}</Text>
-                <Text style={styles.aptMeta}>{a.date} · {a.time} · R$ {Number(a.price).toFixed(2)}</Text>
-                <View style={{ marginTop: 6 }}><Badge label={STATUS_LABELS[a.status]} tone={statusTone(a.status)} /></View>
+                <Text style={styles.aptSvc}>{a.service_name}</Text>
+                <Text style={styles.aptMeta}>{a.status === "concluido" ? "realizado" : STATUS_LABELS[a.status]?.toLowerCase()}{a.barber_name ? ` com ${a.barber_name}` : ""} — {fmtBr(a.date)} — {a.time}</Text>
+                <View style={{ marginTop: 6, flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+                  <Badge label={STATUS_LABELS[a.status]} tone={statusTone(a.status)} />
+                  {a.used_mensal && <Badge label={a.mensal_consumed ? "Consumiu 1 corte do ciclo mensal" : "Cliente Mensal"} tone="gold" />}
+                </View>
               </View>
             </View>
           ))

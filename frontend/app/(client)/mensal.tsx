@@ -79,7 +79,9 @@ export default function Mensal() {
                 {sub.usage_history.map((h: any, i: number) => (
                   <View key={i} style={styles.hist}>
                     <Icon name="check-circle" size={16} color={colors.brandPrimary} />
-                    <Text style={styles.histTxt}>Corte utilizado em {new Date(h.at).toLocaleString("pt-BR")}</Text>
+                    <Text style={styles.histTxt}>
+                      {h.cut_number ? `${h.cut_number}º corte · ` : ""}{h.service_name || "Corte"}{h.barber_name ? ` com ${h.barber_name}` : ""} — {h.date ? `${h.date.split("-").reverse().join("/")} ${h.time || ""}` : new Date(h.at).toLocaleString("pt-BR")}
+                    </Text>
                   </View>
                 ))}
               </>

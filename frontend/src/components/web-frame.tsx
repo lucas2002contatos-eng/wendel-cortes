@@ -1,18 +1,23 @@
 import { ReactNode, useEffect } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions, Text } from "react-native";
+import { useSegments, usePathname } from "expo-router";
+import { Image } from "expo-image";
 import { colors, spacing } from "@/src/theme";
 
 const FRAME_MAX_WIDTH = 520;
 const DESKTOP_BREAKPOINT = 768;
 
 /**
- * On web desktop, centers the app in a fixed-width column so screens
- * designed for mobile don't stretch across the whole browser window.
- * On native (and narrow web) it is a pass-through.
+ * On web desktop, centers mobile-designed screens in a fixed-width column.
+ * Admin screens and the public landing page use the full browser width
+ * (they have their own responsive layouts). On native it is a pass-through.
  */
 export function WebFrame({ children }: { children: ReactNode }) {
   const { width } = useWindowDimensions();
+  const segments = useSegments();
+  const pathname = usePathname();
   const isDesktopWeb = Platform.OS === "web" && width >= DESKTOP_BREAKPOINT;
+  const fullWidthRoute = pathname === "/" || (segments[0] as string) === "(admin)";
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
@@ -20,14 +25,12 @@ export function WebFrame({ children }: { children: ReactNode }) {
     document.body.style.backgroundColor = colors.surface;
   }, []);
 
-  if (!isDesktopWeb) return <>{children}</>;
+  if (!isDesktopWeb || fullWidthRoute) return <>{children}</>;
 
   return (
     <View style={styles.backdrop}>
       <View style={styles.sideBrand}>
-        <Text style={styles.brandTop}>WENDEL</Text>
-        <Text style={styles.brandBottom}>CORTES</Text>
-        <View style={styles.brandLine} />
+        <Image source={require("../../assets/images/logo.jpeg")} style={styles.logo} contentFit="contain" />
         <Text style={styles.brandSub}>Agendamentos · Fila · Cliente Mensal</Text>
       </View>
       <View style={styles.frame}>{children}</View>
@@ -61,8 +64,6 @@ const styles = StyleSheet.create({
     paddingRight: spacing["3xl"],
   },
   sideSpacer: { flex: 1 },
-  brandTop: { color: colors.onSurface, fontSize: 40, fontWeight: "300", letterSpacing: 8 },
-  brandBottom: { color: colors.brandPrimary, fontSize: 40, fontWeight: "800", letterSpacing: 8 },
-  brandLine: { height: 1, width: 72, backgroundColor: colors.brandPrimary, marginVertical: spacing.xl },
+  logo: { width: 240, height: 234, borderRadius: 32, marginBottom: spacing.xl },
   brandSub: { color: colors.muted, fontSize: 13, letterSpacing: 1.5, textTransform: "uppercase" },
 });

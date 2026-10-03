@@ -42,7 +42,7 @@ export default function Mensalistas() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <View style={{ paddingTop: insets.top + spacing.lg, paddingHorizontal: spacing.xl, backgroundColor: colors.surface }}>
+      <View style={{ paddingTop: insets.top + spacing.lg, paddingHorizontal: spacing.xl, backgroundColor: colors.surface, width: "100%", maxWidth: 760, alignSelf: "center" }}>
         <Text style={styles.h1}>Mensalistas</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.md }}>
           {FILTERS.map((f) => (
@@ -52,7 +52,7 @@ export default function Mensalistas() {
           ))}
         </ScrollView>
       </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing["3xl"] }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.brandPrimary} />}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing["3xl"], width: "100%", maxWidth: 760, alignSelf: "center" }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.brandPrimary} />}>
         {visible.length === 0 ? <Text style={styles.empty}>Nenhum mensalista neste filtro.</Text> :
           visible.map((s) => (
             <View key={s.id} style={styles.card}>

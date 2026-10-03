@@ -4,6 +4,7 @@ import { useRouter, Link } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
+import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
 import { api, setSession } from "@/src/api";
 import { GoldButton } from "@/src/ui";
@@ -48,8 +49,11 @@ export default function Login() {
       >
         <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: insets.top + 60, paddingBottom: insets.bottom + spacing.xl }}>
           <View style={{ flex: 1, justifyContent: "center" }}>
-            <Text style={styles.brand}>WENDEL</Text>
-            <Text style={styles.brandBottom}>CORTES</Text>
+            <Pressable testID="login-back-home" onPress={() => router.replace("/")} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: spacing.xl, minHeight: 44 }}>
+              <Icon name="arrow-left" size={18} color={colors.muted} />
+              <Text style={{ color: colors.muted, fontSize: 13 }}>Voltar ao início</Text>
+            </Pressable>
+            <Image source={require("../../assets/images/logo.jpeg")} style={{ width: 150, height: 146, borderRadius: 22 }} contentFit="contain" />
             <View style={{ height: 1, backgroundColor: colors.brandPrimary, width: 80, marginVertical: spacing.xl }} />
             <Text style={styles.h1}>Bem-vindo</Text>
             <Text style={styles.sub}>Acesse sua conta para agendar e acompanhar seus atendimentos.</Text>

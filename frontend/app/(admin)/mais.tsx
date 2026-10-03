@@ -1,29 +1,51 @@
-import { useCallback, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, RefreshControl } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { View, Text, ScrollView, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
 import { api, clearSession } from "@/src/api";
-import { GhostButton } from "@/src/ui";
+import { GhostButton, GoldButton } from "@/src/ui";
 
 export default function Mais() {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<"services" | "settings" | "clients" | "finance">("services");
+  const [tab, setTab] = useState<"services" | "settings" | "shop" | "clients" | "finance" | "reports">("services");
+  const [reportDays, setReportDays] = useState<number>(30);
+  const [reports, setReports] = useState<any>(null);
+  useEffect(() => {
+    if (tab !== "reports") return;
+    setReports(null);
+    const from = reportDays ? new Date(Date.now() - reportDays * 86400000).toISOString().slice(0, 10) : "";
+    api(`/admin/reports/barbers${from ? `?from_date=${from}` : ""}`).then(setReports).catch(() => setReports({ barbers: [] }));
+  }, [tab, reportDays]);
   const router = useRouter();
 
   const [services, setServices] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [clients, setClients] = useState<any[]>([]);
   const [finance, setFinance] = useState<any>(null);
+  const [shop, setShop] = useState<any>({ whatsapp: "", address: "", instagram: "", about: "" });
+  const [shopMsg, setShopMsg] = useState<string | null>(null);
+  const [shopErr, setShopErr] = useState<string | null>(null);
+  const [savingShop, setSavingShop] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const [s, cfg, c, f] = await Promise.all([api("/services"), api("/settings"), api("/admin/clients"), api("/admin/finance")]);
       setServices(s); setSettings(cfg); setClients(c); setFinance(f);
+      if (cfg?.shop) setShop(cfg.shop);
     } catch {}
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const saveShop = async () => {
+    setShopMsg(null); setShopErr(null); setSavingShop(true);
+    try {
+      const saved = await api("/settings/shop", { method: "PUT", body: JSON.stringify(shop) });
+      setShop(saved);
+      setShopMsg("Dados da barbearia salvos!");
+    } catch (e: any) { setShopErr(e.message); }
+    finally { setSavingShop(false); }
+  };
 
   const updateSvc = async (id: string, patch: any) => {
     const s = services.find((x) => x.id === id); if (!s) return;
@@ -41,14 +63,16 @@ export default function Mais() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
-      <View style={{ paddingTop: insets.top + spacing.lg, paddingHorizontal: spacing.xl }}>
+      <View style={{ paddingTop: insets.top + spacing.lg, paddingHorizontal: spacing.xl, width: "100%", maxWidth: 760, alignSelf: "center" }}>
         <Text style={styles.h1}>Mais</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.md }}>
           {[
             { k: "services", l: "Serviços" },
             { k: "settings", l: "Horários" },
+            { k: "shop", l: "Barbearia" },
             { k: "clients", l: "Clientes" },
             { k: "finance", l: "Financeiro" },
+            { k: "reports", l: "Relatórios" },
           ].map((t) => (
             <Pressable key={t.k} testID={`tab-${t.k}`} onPress={() => setTab(t.k as any)} style={[styles.chip, tab === t.k && styles.chipSel]}>
               <Text style={[styles.chipTxt, tab === t.k && { color: colors.onBrandPrimary }]}>{t.l}</Text>
@@ -56,7 +80,7 @@ export default function Mais() {
           ))}
         </ScrollView>
       </View>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing["3xl"] }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing["3xl"], width: "100%", maxWidth: 760, alignSelf: "center" }}>
         {tab === "services" && services.map((s) => (
           <View key={s.id} style={styles.card}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -101,6 +125,61 @@ export default function Mais() {
           </View>
         )}
 
+        {tab === "shop" && (
+          <View>
+            <Text style={styles.sec}>Dados públicos da barbearia</Text>
+            <View style={styles.card}>
+              <Text style={styles.lbl}>WhatsApp (com DDD)</Text>
+              <TextInput
+                testID="shop-whatsapp-input"
+                style={styles.input}
+                keyboardType="phone-pad"
+                placeholder="11999999999"
+                placeholderTextColor={colors.muted}
+                value={shop.whatsapp}
+                onChangeText={(v) => setShop({ ...shop, whatsapp: v })}
+              />
+              <Text style={styles.hint}>Usado no botão “Falar no WhatsApp” da página inicial e nas confirmações.</Text>
+
+              <Text style={[styles.lbl, { marginTop: spacing.md }]}>Endereço</Text>
+              <TextInput
+                testID="shop-address-input"
+                style={styles.input}
+                placeholder="Rua, número - Bairro, Cidade"
+                placeholderTextColor={colors.muted}
+                value={shop.address}
+                onChangeText={(v) => setShop({ ...shop, address: v })}
+              />
+
+              <Text style={[styles.lbl, { marginTop: spacing.md }]}>Instagram</Text>
+              <TextInput
+                testID="shop-instagram-input"
+                style={styles.input}
+                autoCapitalize="none"
+                placeholder="@suabarbearia"
+                placeholderTextColor={colors.muted}
+                value={shop.instagram}
+                onChangeText={(v) => setShop({ ...shop, instagram: v })}
+              />
+
+              <Text style={[styles.lbl, { marginTop: spacing.md }]}>Sobre a barbearia</Text>
+              <TextInput
+                testID="shop-about-input"
+                style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]}
+                multiline
+                placeholder="Breve descrição exibida na página inicial"
+                placeholderTextColor={colors.muted}
+                value={shop.about}
+                onChangeText={(v) => setShop({ ...shop, about: v })}
+              />
+
+              {shopErr && <Text style={styles.errTxt}>{shopErr}</Text>}
+              {shopMsg && <Text style={styles.okTxt}>{shopMsg}</Text>}
+              <GoldButton testID="shop-save-btn" label={savingShop ? "Salvando..." : "Salvar"} disabled={savingShop} onPress={saveShop} style={{ marginTop: spacing.lg }} />
+            </View>
+          </View>
+        )}
+
         {tab === "clients" && clients.map((c) => (
           <View key={c.id} style={styles.card}>
             <Text style={styles.name}>{c.name}</Text>
@@ -125,6 +204,43 @@ export default function Mais() {
           </View>
         )}
 
+        {tab === "reports" && (
+          <View style={{ gap: spacing.md }}>
+            <View style={{ flexDirection: "row", gap: spacing.sm }}>
+              {[{ k: 7, l: "7 dias" }, { k: 30, l: "30 dias" }, { k: 0, l: "Tudo" }].map((p) => (
+                <Pressable key={p.k} testID={`report-period-${p.k}`} onPress={() => setReportDays(p.k)} style={[styles.modeChip, reportDays === p.k && styles.modeChipSel]}>
+                  <Text style={[styles.chipTxt, reportDays === p.k && { color: colors.onBrandPrimary }]}>{p.l}</Text>
+                </Pressable>
+              ))}
+            </View>
+            {!reports ? <ActivityIndicator color={colors.brandPrimary} /> : reports.barbers.length === 0 ? <Text style={{ color: colors.muted }}>Sem atendimentos no período.</Text> :
+              reports.barbers.map((r: any) => (
+                <View key={r.barber_id} style={styles.card} testID={`report-${r.barber_name}`}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={styles.name}>{r.barber_name}</Text>
+                    <Text style={styles.big}>R$ {Number(r.faturamento).toFixed(2)}</Text>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: spacing.lg, marginTop: spacing.sm }}>
+                    <View><Text style={styles.lbl}>Atendimentos</Text><Text style={styles.kpi}>{r.atendimentos}</Text></View>
+                    <View><Text style={styles.lbl}>Clientes</Text><Text style={styles.kpi}>{r.clientes}</Text></View>
+                    <View><Text style={styles.lbl}>Cortes mensais</Text><Text style={styles.kpi}>{r.cortes_mensal}</Text></View>
+                    {r.comissao_estimada != null && <View><Text style={styles.lbl}>Comissão ({r.commission_pct}%)</Text><Text style={styles.kpi}>R$ {Number(r.comissao_estimada).toFixed(2)}</Text></View>}
+                  </View>
+                  {r.servicos.length > 0 && (
+                    <View style={{ marginTop: spacing.sm }}>
+                      {r.servicos.map((s: any) => (
+                        <View key={s.name} style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
+                          <Text style={{ color: colors.onSurfaceSecondary, fontSize: 13 }}>{s.name}</Text>
+                          <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>{s.count}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+          </View>
+        )}
+
         <GhostButton testID="admin-logout" label="Sair" onPress={logout} style={{ marginTop: spacing.xl }} />
       </ScrollView>
     </View>
@@ -144,6 +260,10 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, fontSize: 12, marginTop: 2 },
   lbl: { color: colors.muted, fontSize: 11, letterSpacing: 1, textTransform: "uppercase" },
   big: { color: colors.brandPrimary, fontSize: 26, fontWeight: "800", marginTop: 4 },
+  kpi: { color: colors.onSurface, fontSize: 18, fontWeight: "800" },
   input: { color: colors.onSurface, backgroundColor: colors.surfaceTertiary, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 10, marginTop: 4 },
+  hint: { color: colors.muted, fontSize: 11, marginTop: 6 },
+  errTxt: { color: colors.onError, backgroundColor: colors.error, padding: spacing.md, borderRadius: radius.sm, marginTop: spacing.md },
+  okTxt: { color: colors.onSuccess, backgroundColor: colors.success, padding: spacing.md, borderRadius: radius.sm, marginTop: spacing.md },
   pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill },
 });

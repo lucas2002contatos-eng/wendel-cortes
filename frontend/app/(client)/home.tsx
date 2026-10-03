@@ -7,13 +7,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
 import { api, getUser } from "@/src/api";
-import { Badge, Card, STATUS_LABELS, statusTone } from "@/src/ui";
+import { Badge, Card, GoldButton, STATUS_LABELS, statusTone } from "@/src/ui";
+
+function fmtDate(d: Date) {
+  const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [sub, setSub] = useState<any>(null);
   const [nextApt, setNextApt] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -36,6 +42,20 @@ export default function Home() {
 
   const remaining = sub ? sub.cuts_total - sub.cuts_used : 0;
   const isSubActive = sub && sub.status === "active";
+
+  const todayStr = fmtDate(new Date());
+  const tomorrowStr = fmtDate(new Date(Date.now() + 86400000));
+  const reminderWhen = nextApt?.date === todayStr ? "hoje" : nextApt?.date === tomorrowStr ? "amanhã" : null;
+
+  const confirmPresence = async () => {
+    if (!nextApt) return;
+    setConfirming(true);
+    try {
+      const updated = await api(`/appointments/${nextApt.id}/confirm-presence`, { method: "POST" });
+      setNextApt(updated);
+    } catch {}
+    finally { setConfirming(false); }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -78,6 +98,37 @@ export default function Home() {
           </View>
         </Pressable>
 
+        {/* Reminder: appointment today/tomorrow */}
+        {nextApt && reminderWhen && (
+          <View testID="reminder-card" style={styles.reminder}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
+              <Icon name="bell" size={18} color={colors.brandPrimary} />
+              <Text style={styles.reminderLabel}>LEMBRETE</Text>
+            </View>
+            <Text style={styles.reminderTitle}>
+              Seu {nextApt.service_name} é {reminderWhen} às <Text style={{ color: colors.brandPrimary }}>{nextApt.time}</Text>
+            </Text>
+            {nextApt.presence_confirmed ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing.sm }}>
+                <Icon name="check-circle" size={16} color={colors.onSuccess} />
+                <Text style={styles.reminderOk}>Presença confirmada. Te esperamos!</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.reminderSub}>Confirme sua presença para garantirmos seu horário.</Text>
+                <GoldButton
+                  testID="confirm-presence-btn"
+                  icon="check"
+                  label={confirming ? "Confirmando..." : "Confirmar presença"}
+                  disabled={confirming}
+                  onPress={confirmPresence}
+                  style={{ marginTop: spacing.md }}
+                />
+              </>
+            )}
+          </View>
+        )}
+
         {/* Next appointment */}
         {nextApt && (
           <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xl }}>
@@ -88,7 +139,10 @@ export default function Home() {
                   <Text style={styles.aptSvc}>{nextApt.service_name}</Text>
                   <Text style={styles.aptTime}>{nextApt.date} · {nextApt.time}</Text>
                 </View>
-                <Badge label={STATUS_LABELS[nextApt.status]} tone={statusTone(nextApt.status)} />
+                <View style={{ alignItems: "flex-end", gap: 6 }}>
+                  <Badge label={STATUS_LABELS[nextApt.status]} tone={statusTone(nextApt.status)} />
+                  {nextApt.presence_confirmed && <Badge label="Presença confirmada" tone="success" />}
+                </View>
               </View>
             </Card>
           </View>
@@ -129,6 +183,11 @@ const styles = StyleSheet.create({
   heroTitle: { color: colors.onSurface, fontSize: 22, fontWeight: "700", marginTop: 4 },
   aptSvc: { color: colors.onSurface, fontSize: 16, fontWeight: "700" },
   aptTime: { color: colors.muted, fontSize: 13, marginTop: 4 },
+  reminder: { marginHorizontal: spacing.xl, marginTop: spacing.xl, backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary, borderWidth: 1, borderRadius: radius.md, padding: spacing.lg },
+  reminderLabel: { color: colors.brandPrimary, fontSize: 11, letterSpacing: 2, fontWeight: "700" },
+  reminderTitle: { color: colors.onSurface, fontSize: 17, fontWeight: "700", marginTop: spacing.sm },
+  reminderSub: { color: colors.onSurfaceSecondary, fontSize: 13, marginTop: 4 },
+  reminderOk: { color: colors.onSuccess, fontSize: 13, fontWeight: "600" },
   qa: {
     width: "48%", backgroundColor: colors.surfaceSecondary, borderColor: colors.border, borderWidth: 1,
     borderRadius: radius.md, padding: spacing.lg, gap: spacing.md, minHeight: 90,

@@ -1,7 +1,6 @@
 import { Linking, Platform } from "react-native";
 
-// Barbershop WhatsApp — client can also send confirmation to their own number
-export const SHOP_WHATSAPP = "5511999999999"; // pode ser editado pelo barbeiro depois
+// O número da barbearia é configurado pelo admin em Mais → Barbearia (GET /public/info → shop.whatsapp).
 
 export function sanitizePhone(p: string): string {
   const digits = (p || "").replace(/\D/g, "");
@@ -31,11 +30,15 @@ export async function openWhatsApp(phone: string, message: string) {
   }
 }
 
-export function bookingMsg(name: string, service: string, date: string, time: string, payment: string) {
+export function bookingMsg(name: string, service: string, date: string, time: string, payment: string, barber?: string) {
   const pMap: any = { pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro (pagar no local)", mensal: "Cliente Mensal" };
-  return `Olá ${name}! Seu agendamento na WENDEL CORTES foi confirmado:\n\n• Serviço: ${service}\n• Data: ${date}\n• Horário: ${time}\n• Pagamento: ${pMap[payment] || payment}\n\nAté breve!`;
+  return `Olá ${name}! Seu agendamento na WENDEL CORTES foi confirmado:\n\n• Serviço: ${service}\n${barber ? `• Barbeiro: ${barber}\n` : ""}• Data: ${date}\n• Horário: ${time}\n• Pagamento: ${pMap[payment] || payment}\n\nAté breve!`;
 }
 
-export function queueMsg(name: string, service: string, pos: number) {
-  return `Olá ${name}! Você entrou na fila da WENDEL CORTES.\n\n• Serviço: ${service}\n• Posição atual: ${pos}º\n\nAcompanhe pelo app. Avisaremos quando for sua vez.`;
+export function queueMsg(name: string, service: string, pos: number, barber?: string) {
+  return `Olá ${name}! Você entrou na fila ${barber ? `do ${barber} ` : ""}da WENDEL CORTES.\n\n• Serviço: ${service}\n• Posição atual: ${pos}º\n\nAcompanhe pelo app. Avisaremos quando for sua vez.`;
+}
+
+export function contactMsg() {
+  return "Olá! Vi o site da WENDEL CORTES e gostaria de mais informações para agendar um horário.";
 }
