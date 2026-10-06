@@ -1,11 +1,11 @@
 import { useCallback, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, TextInput } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
-import { api, clearSession, getUser } from "@/src/api";
-import { Badge, GhostButton, STATUS_LABELS, statusTone } from "@/src/ui";
+import { api, clearSession, getUser, getToken, setSession } from "@/src/api";
+import { Badge, GhostButton, GoldButton, STATUS_LABELS, statusTone } from "@/src/ui";
 
 const fmtBr = (d?: string) => (d ? d.split("-").reverse().join("/") : "");
 
@@ -23,6 +23,16 @@ export default function Perfil() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const logout = async () => { await clearSession(); router.replace("/(auth)/login"); };
+  const [edit, setEdit] = useState<any | null>(null);
+  const [editErr, setEditErr] = useState<string | null>(null);
+  const saveProfile = async () => {
+    setEditErr(null);
+    try {
+      const u = await api("/auth/me", { method: "PUT", body: JSON.stringify(edit) });
+      const t = await getToken(); if (t) await setSession(t, u);
+      setUser(u); setEdit(null);
+    } catch (e: any) { setEditErr(e.message); }
+  };
   const cancel = async (id: string) => {
     try { await api(`/appointments/${id}/cancel`, { method: "POST" }); await load(); }
     catch (e: any) { alert(e.message); }
@@ -41,7 +51,22 @@ export default function Perfil() {
             <Text style={styles.meta}>{user?.phone}</Text>
             <Text style={styles.meta}>{user?.email}</Text>
           </View>
+          <Pressable testID="edit-profile-btn" onPress={() => setEdit(edit ? null : { name: user?.name || "", phone: user?.phone || "" })} style={styles.cancelBtn}>
+            <Icon name={edit ? "x" : "edit-2"} size={16} color={colors.onSurface} />
+          </Pressable>
         </View>
+        {edit && (
+          <View style={styles.apt}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.meta}>Nome</Text>
+              <TextInput testID="profile-name-input" style={styles.input} value={edit.name} onChangeText={(v) => setEdit({ ...edit, name: v })} />
+              <Text style={styles.meta}>Telefone (WhatsApp)</Text>
+              <TextInput testID="profile-phone-input" style={styles.input} keyboardType="phone-pad" value={edit.phone} onChangeText={(v) => setEdit({ ...edit, phone: v })} />
+              {editErr && <Text style={{ color: colors.onError, marginTop: 6 }}>{editErr}</Text>}
+              <GoldButton testID="profile-save-btn" label="Salvar dados" onPress={saveProfile} style={{ marginTop: spacing.md }} />
+            </View>
+          </View>
+        )}
 
         <Text style={styles.sec}>Próximos atendimentos</Text>
         {upcoming.length === 0 ? <Text style={styles.empty}>Nenhum agendamento futuro.</Text> :
@@ -93,4 +118,5 @@ const styles = StyleSheet.create({
   aptSvc: { color: colors.onSurface, fontSize: 15, fontWeight: "700" },
   aptMeta: { color: colors.muted, fontSize: 12, marginTop: 4 },
   cancelBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.error, alignItems: "center", justifyContent: "center" },
+  input: { color: colors.onSurface, backgroundColor: colors.surfaceTertiary, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: 10, marginTop: 4, marginBottom: spacing.sm, minHeight: 44 },
 });

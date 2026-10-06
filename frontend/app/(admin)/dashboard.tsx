@@ -9,6 +9,7 @@ import { Badge, STATUS_LABELS, statusTone } from "@/src/ui";
 import { useIsDesktop } from "@/src/use-desktop";
 import { AgendaPanel } from "@/src/admin/agenda-panel";
 import { FilaPanel } from "@/src/admin/fila-panel";
+import { Logo, useBranding } from "@/src/branding";
 
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
@@ -16,6 +17,7 @@ export default function Dashboard() {
   const [data, setData] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const branding = useBranding();
 
   const load = useCallback(async () => {
     setUser(await getUser());
@@ -33,14 +35,20 @@ export default function Dashboard() {
     { icon: "clock", label: "Pagto pendente", value: String(data.pending_payments) },
     { icon: "award", label: "Mensalistas ativos", value: String(data.active_subscriptions) },
   ];
+  const isBarber = user?.role === "barber";
+  const working = (data.barbers_working || []).map((b: any) => b.name).join(", ") || "ninguém";
 
   if (isDesktop) {
     return (
       <View testID="dashboard-desktop" style={styles.deskRoot}>
         <View style={styles.deskHeader}>
-          <View>
-            <Text style={styles.hello}>Olá, {user?.name?.split(" ")[0]}</Text>
-            <Text style={styles.brand}>WENDEL <Text style={{ color: colors.brandPrimary }}>CORTES</Text> · PAINEL</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+            <Logo size={56} />
+            <View>
+              <Text style={styles.hello}>Olá, {user?.name?.split(" ")[0]}</Text>
+              <Text style={styles.brand}>{branding.name.toUpperCase()} · {isBarber ? "MEU PAINEL" : "PAINEL"}</Text>
+              <Text style={styles.deskDate}>Trabalhando hoje: {working}</Text>
+            </View>
           </View>
           <Text style={styles.deskDate}>{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}</Text>
         </View>
@@ -58,8 +66,14 @@ export default function Dashboard() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: spacing["3xl"], paddingHorizontal: spacing.xl }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} tintColor={colors.brandPrimary} />}>
-        <Text style={styles.hello}>Olá, {user?.name?.split(" ")[0]}</Text>
-        <Text style={[styles.brand, { marginBottom: spacing.xl }]}>DASHBOARD</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.xl }}>
+          <Logo size={52} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hello}>Olá, {user?.name?.split(" ")[0]}</Text>
+            <Text style={styles.brand}>{isBarber ? "MEU PAINEL" : "PAINEL"}</Text>
+            <Text style={styles.svc}>Trabalhando hoje: {working}</Text>
+          </View>
+        </View>
 
         <View style={styles.grid}>
           {kpis.map((k) => <Kpi key={k.label} {...k} style={{ width: "48%" }} />)}

@@ -9,6 +9,7 @@ import { colors, spacing, radius } from "@/src/theme";
 import { api, getToken, getUser } from "@/src/api";
 import { GoldButton, GhostButton } from "@/src/ui";
 import { openWhatsApp, contactMsg } from "@/src/whatsapp";
+import { Logo } from "@/src/branding";
 
 const DAYS = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
 const MODE_LABEL: Record<string, string> = { agenda: "Agendamento", fila: "Fila por chegada", fechado: "Fechado" };
@@ -27,7 +28,7 @@ export default function Index() {
       const token = await getToken();
       const user = await getUser();
       if (token && user) {
-        router.replace(user.role === "admin" ? "/(admin)/dashboard" : "/(client)/home");
+        router.replace(user.role === "admin" || user.role === "barber" ? "/(admin)/dashboard" : "/(client)/home");
         return;
       }
       setReady(true);
@@ -61,14 +62,14 @@ export default function Index() {
           <LinearGradient colors={["rgba(10,10,10,0.35)", "rgba(10,10,10,0.97)"]} style={StyleSheet.absoluteFill as any} />
           <View style={[styles.container, { flex: 1, justifyContent: "flex-end", paddingBottom: spacing["2xl"] }]}>
             <View style={[styles.topBar]}>
-              <Text style={styles.topBrand}>WENDEL <Text style={{ color: colors.brandPrimary }}>CORTES</Text></Text>
+              <Text style={styles.topBrand}>{(info?.name || "WENDEL CORTES").toUpperCase()}</Text>
               <Pressable testID="landing-login-top" onPress={() => router.push("/(auth)/login")} style={styles.topLogin}>
                 <Icon name="log-in" size={16} color={colors.brandPrimary} />
                 <Text style={styles.topLoginTxt}>Entrar</Text>
               </Pressable>
             </View>
             <View style={{ flex: 1 }} />
-            <Image source={require("../assets/images/logo.jpeg")} style={[styles.logo, wide && { width: 260, height: 253 }]} contentFit="contain" />
+            <View style={styles.logo}><Logo size={wide ? 260 : 200} /></View>
             <Text style={styles.heroKicker}>BARBEARIA · DESDE 2017</Text>
             <Text style={[styles.heroSub, wide && { maxWidth: 560 }]}>{shop.about || "Cortes clássicos e modernos, barba e cuidados masculinos."}</Text>
             <View style={[styles.heroActions, wide && { flexDirection: "row" }]}>
@@ -157,7 +158,7 @@ export default function Index() {
             </View>
           </View>
 
-          <Text style={styles.footer}>© {new Date().getFullYear()} WENDEL CORTES · Barbearia</Text>
+          <Text style={styles.footer}>© {new Date().getFullYear()} {info?.name || "WENDEL CORTES"} · Barbearia</Text>
         </View>
       </ScrollView>
     </View>
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
   topLogin: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.brandPrimary, minHeight: 44 },
   topLoginTxt: { color: colors.brandPrimary, fontWeight: "700", fontSize: 13 },
   heroKicker: { color: colors.brandPrimary, fontSize: 12, letterSpacing: 4, fontWeight: "700", marginTop: spacing.lg },
-  logo: { width: 200, height: 195, borderRadius: 28, marginTop: spacing.xl },
+  logo: { marginTop: spacing.xl },
   heroSub: { color: colors.onSurfaceSecondary, fontSize: 15, lineHeight: 22, marginTop: spacing.lg },
   heroActions: { gap: spacing.md, marginTop: spacing.xl },
   sec: { color: colors.muted, fontSize: 12, letterSpacing: 2, textTransform: "uppercase", marginTop: spacing["2xl"], marginBottom: spacing.md },

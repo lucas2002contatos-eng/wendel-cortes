@@ -1,7 +1,7 @@
 import { ReactNode, useEffect } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions, Text } from "react-native";
 import { useSegments, usePathname } from "expo-router";
-import { Image } from "expo-image";
+import { Logo } from "@/src/branding";
 import { colors, spacing } from "@/src/theme";
 
 const FRAME_MAX_WIDTH = 520;
@@ -30,7 +30,7 @@ export function WebFrame({ children }: { children: ReactNode }) {
   return (
     <View style={styles.backdrop}>
       <View style={styles.sideBrand}>
-        <Image source={require("../../assets/images/logo.jpeg")} style={styles.logo} contentFit="contain" />
+        <View style={styles.logo}><Logo size={240} /></View>
         <Text style={styles.brandSub}>Agendamentos · Fila · Cliente Mensal</Text>
       </View>
       <View style={styles.frame}>{children}</View>
@@ -64,6 +64,6 @@ const styles = StyleSheet.create({
     paddingRight: spacing["3xl"],
   },
   sideSpacer: { flex: 1 },
-  logo: { width: 240, height: 234, borderRadius: 32, marginBottom: spacing.xl },
+  logo: { marginBottom: spacing.xl },
   brandSub: { color: colors.muted, fontSize: 13, letterSpacing: 1.5, textTransform: "uppercase" },
 });

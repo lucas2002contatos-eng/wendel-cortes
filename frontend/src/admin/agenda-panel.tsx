@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl } from "r
 import { useFocusEffect } from "expo-router";
 import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
-import { api } from "@/src/api";
+import { api, getUser } from "@/src/api";
 import { Badge, STATUS_LABELS, statusTone } from "@/src/ui";
 
 const WD = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
@@ -41,7 +41,8 @@ export function AgendaPanel({ compact = false }: { compact?: boolean }) {
   const [apts, setApts] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => { api("/barbers").then(setBarbers).catch(() => {}); }, []);
+  const [isBarber, setIsBarber] = useState(false);
+  useEffect(() => { getUser().then((u) => setIsBarber(u?.role === "barber")); api("/barbers").then(setBarbers).catch(() => {}); }, []);
 
   const range = (): { from: string; to: string } => {
     if (view === "dia") return { from: sel, to: sel };
@@ -146,7 +147,7 @@ export function AgendaPanel({ compact = false }: { compact?: boolean }) {
     <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: pad }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Text style={compact ? styles.h2 : styles.h1}>Agenda dos Barbeiros</Text>
+          <Text style={compact ? styles.h2 : styles.h1}>{isBarber ? "Minha agenda" : "Agenda dos Barbeiros"}</Text>
           <View style={styles.seg}>
             {(["dia", "semana", "mes"] as ViewMode[]).map((v) => (
               <Pressable key={v} testID={`view-${v}`} onPress={() => setView(v)} style={[styles.segBtn, view === v && styles.segBtnSel]}>
@@ -156,13 +157,13 @@ export function AgendaPanel({ compact = false }: { compact?: boolean }) {
           </View>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingTop: spacing.md }}>
+        {!isBarber && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingTop: spacing.md }}>
           {[{ id: "all", name: "Todos os barbeiros" }, ...barbers].map((b) => (
             <Pressable key={b.id} testID={`agenda-barber-${b.id === "all" ? "all" : b.name}`} onPress={() => setBarber(b.id)} style={[styles.bchip, barber === b.id && styles.bchipSel]}>
               <Text style={[styles.bchipTxt, barber === b.id && { color: colors.onBrandPrimary }]}>{b.name}{b.active === false ? " (inativo)" : ""}</Text>
             </Pressable>
           ))}
-        </ScrollView>
+        </ScrollView>}
 
         {view === "dia" ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.md }}>

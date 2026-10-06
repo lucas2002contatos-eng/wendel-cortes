@@ -5,13 +5,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import Icon from "@react-native-vector-icons/feather";
+import { Logo } from "@/src/branding";
 import { colors, spacing, radius } from "@/src/theme";
 import { api, setSession } from "@/src/api";
 import { GoldButton } from "@/src/ui";
 
 export default function Login() {
-  const [email, setEmail] = useState("admin@wendelcortes.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
@@ -23,7 +24,7 @@ export default function Login() {
     try {
       const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
       await setSession(res.token, res.user);
-      if (res.user.role === "admin") router.replace("/(admin)/dashboard");
+      if (res.user.role === "admin" || res.user.role === "barber") router.replace("/(admin)/dashboard");
       else router.replace("/(client)/home");
     } catch (e: any) {
       setErr(e.message || "Erro ao entrar");
@@ -53,7 +54,7 @@ export default function Login() {
               <Icon name="arrow-left" size={18} color={colors.muted} />
               <Text style={{ color: colors.muted, fontSize: 13 }}>Voltar ao início</Text>
             </Pressable>
-            <Image source={require("../../assets/images/logo.jpeg")} style={{ width: 150, height: 146, borderRadius: 22 }} contentFit="contain" />
+            <Logo size={150} />
             <View style={{ height: 1, backgroundColor: colors.brandPrimary, width: 80, marginVertical: spacing.xl }} />
             <Text style={styles.h1}>Bem-vindo</Text>
             <Text style={styles.sub}>Acesse sua conta para agendar e acompanhar seus atendimentos.</Text>
@@ -88,8 +89,13 @@ export default function Login() {
                 disabled={loading}
                 style={{ marginTop: spacing.lg }}
               />
+              <Link href="/(auth)/forgot" asChild>
+                <Pressable testID="forgot-password-link" style={{ marginTop: spacing.lg, alignItems: "center", minHeight: 44, justifyContent: "center" }}>
+                  <Text style={{ color: colors.onSurfaceSecondary, fontSize: 14 }}>Esqueci minha senha</Text>
+                </Pressable>
+              </Link>
               <Link href="/(auth)/register" asChild>
-                <Pressable testID="go-register-link" style={{ marginTop: spacing.lg, alignItems: "center" }}>
+                <Pressable testID="go-register-link" style={{ marginTop: spacing.sm, alignItems: "center", minHeight: 44, justifyContent: "center" }}>
                   <Text style={{ color: colors.brandPrimary, fontSize: 14 }}>Criar uma conta</Text>
                 </Pressable>
               </Link>

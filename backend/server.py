@@ -12,19 +12,25 @@ import bcrypt
 import httpx
 import jwt as pyjwt
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
 from barbers import make_barbers_router, available_barbers, barber_free_slots, is_barber_slot_free
+from admin_config import make_config_router, pix_for_appointment, DEFAULT_PLAN, DEFAULT_PIX, DEFAULT_GENERAL
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret")
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+if len(JWT_SECRET) < 32:
+    raise RuntimeError("JWT_SECRET ausente ou muito curto (mínimo 32 caracteres). Defina um valor aleatório forte em backend/.env")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")  # usado só na primeira criação do admin
+SEED_DEMO_DATA = os.environ.get("SEED_DEMO_DATA", "false").lower() == "true"  # contas/dados de demonstração
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
 PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
 PUSH_BASE_URL = "https://integrations.emergentagent.com"
 
@@ -57,8 +63,56 @@ def verify_password(pw: str, hashed: str) -> bool:
 
 
 def make_token(user_id: str, role: str) -> str:
-    payload = {"sub": user_id, "role": role, "exp": datetime.now(timezone.utc) + timedelta(days=30)}
+    payload = {"sub": user_id, "role": role, "exp": datetime.now(timezone.utc) + timedelta(days=7)}
     return pyjwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+# --- simple in-memory brute-force protection for /auth/login (per IP and per e-mail)
+LOGIN_MAX_FAILURES = 10
+LOGIN_WINDOW = timedelta(minutes=15)
+_login_failures: dict = {}
+
+
+def _login_blocked(key: str) -> bool:
+    rec = _login_failures.get(key)
+    if not rec:
+        return False
+    count, first = rec
+    if now_utc() - first > LOGIN_WINDOW:
+        _login_failures.pop(key, None)
+        return False
+    return count >= LOGIN_MAX_FAILURES
+
+
+def _login_failed(key: str) -> None:
+    count, first = _login_failures.get(key, (0, now_utc()))
+    if now_utc() - first > LOGIN_WINDOW:
+        count, first = 0, now_utc()
+    _login_failures[key] = (count + 1, first)
+
+
+def parse_date_or_400(d: str) -> date:
+    try:
+        return datetime.strptime(d, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Data inválida (use AAAA-MM-DD)")
+
+
+def validate_time_or_400(t: str) -> str:
+    try:
+        datetime.strptime(t, "%H:%M")
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Horário inválido (use HH:MM)")
+    return t
+
+
+def public_queue_entry(e: dict, viewer_id: str) -> dict:
+    """Queue entry as seen by a client: own entry complete, others anonymized (no phone/user_id)."""
+    if e["user_id"] == viewer_id:
+        return e
+    parts = (e.get("client_name") or "").split()
+    short = parts[0] + (f" {parts[-1][0]}." if len(parts) > 1 else "") if parts else "Cliente"
+    return {k: v for k, v in {**e, "client_name": short}.items() if k not in ("client_phone", "user_id")}
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
@@ -77,8 +131,28 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if user.get("role") != "admin":
-        raise HTTPException(403, "Admin only")
+        raise HTTPException(403, "Apenas o Administrador Fundador pode realizar esta ação")
     return user
+
+
+async def require_staff(user: dict = Depends(get_current_user)) -> dict:
+    """Admin (founder) or barber. Barbers are scoped to their own barber_id by the endpoints."""
+    if user.get("role") not in ("admin", "barber"):
+        raise HTTPException(403, "Acesso restrito à equipe")
+    return user
+
+
+def barber_scope(user: dict) -> Optional[str]:
+    return user.get("barber_id") if user.get("role") == "barber" else None
+
+
+async def audit(user: dict, action: str, entity: str, entity_id: str, before, after) -> None:
+    """Persist an administrative change (who / when / what / before / after)."""
+    await db.audit_logs.insert_one({
+        "id": str(uuid.uuid4()), "at": now_utc().isoformat(),
+        "user_id": user.get("id"), "user_name": user.get("name"), "role": user.get("role"),
+        "action": action, "entity": entity, "entity_id": entity_id, "before": before, "after": after,
+    })
 
 
 async def send_push(recipients: List[str], data: dict) -> None:
@@ -109,9 +183,11 @@ class LoginBody(BaseModel):
 class ServiceBody(BaseModel):
     name: str
     description: Optional[str] = ""
-    price: float
-    duration_min: int = 30
+    price: float = Field(ge=0)
+    duration_min: int = Field(30, ge=5, le=480)
     active: bool = True
+    archived: bool = False
+    image_url: Optional[str] = ""
 
 
 class AppointmentBody(BaseModel):
@@ -162,14 +238,18 @@ class CancelPolicyBody(BaseModel):
 
 
 class ShopInfoBody(BaseModel):
+    name: Optional[str] = "WENDEL CORTES"
     whatsapp: str
+    phone: Optional[str] = ""
     address: Optional[str] = ""
     instagram: Optional[str] = ""
     about: Optional[str] = ""
 
 
 DEFAULT_SHOP = {
+    "name": "WENDEL CORTES",
     "whatsapp": "5511999999999",
+    "phone": "",
     "address": "",
     "instagram": "",
     "about": "Barbearia especializada em cortes clássicos e modernos, barba e cuidados masculinos.",
@@ -179,8 +259,11 @@ DEFAULT_SHOP = {
 # =============================== auth =========================================
 @api.post("/auth/register")
 async def register(body: RegisterBody):
+    if len(body.password) < 6:
+        raise HTTPException(400, "A senha deve ter pelo menos 6 caracteres")
     if await db.users.find_one({"email": body.email.lower()}):
-        raise HTTPException(400, "E-mail já cadastrado")
+        # neutral message to avoid account enumeration
+        raise HTTPException(400, "Não foi possível criar a conta com estes dados. Se você já tem cadastro, faça login.")
     uid = str(uuid.uuid4())
     doc = {
         "id": uid,
@@ -197,10 +280,16 @@ async def register(body: RegisterBody):
 
 
 @api.post("/auth/login")
-async def login(body: LoginBody):
-    u = await db.users.find_one({"email": body.email.lower()})
+async def login(body: LoginBody, request: Request):
+    ip = request.client.host if request.client else "unknown"
+    email = body.email.lower()
+    if _login_blocked(f"ip:{ip}") or _login_blocked(f"email:{email}"):
+        raise HTTPException(429, "Muitas tentativas. Tente novamente em 15 minutos.")
+    u = await db.users.find_one({"email": email})
     if not u or not verify_password(body.password, u["password_hash"]):
+        _login_failed(f"ip:{ip}"); _login_failed(f"email:{email}")
         raise HTTPException(401, "Credenciais inválidas")
+    _login_failures.pop(f"ip:{ip}", None); _login_failures.pop(f"email:{email}", None)
     token = make_token(u["id"], u["role"])
     u.pop("_id", None); u.pop("password_hash", None)
     return {"token": token, "user": u}
@@ -211,37 +300,66 @@ async def me(user: dict = Depends(get_current_user)):
     return user
 
 
+class ProfileBody(BaseModel):
+    name: str = Field(min_length=2, max_length=80)
+    phone: str = Field(min_length=8, max_length=20)
+
+
+@api.put("/auth/me")
+async def update_me(body: ProfileBody, user: dict = Depends(get_current_user)):
+    """Clients/staff edit only their own allowed data (name and phone)."""
+    await db.users.update_one({"id": user["id"]}, {"$set": {"name": body.name.strip(), "phone": body.phone.strip()}})
+    await db.appointments.update_many({"user_id": user["id"], "status": {"$nin": ["concluido", "cancelado", "nao_compareceu"]}}, {"$set": {"client_name": body.name.strip(), "client_phone": body.phone.strip()}})
+    return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
+
+
 # =============================== services ====================================
 @api.get("/services")
 async def list_services(user: dict = Depends(get_current_user)):
     items = await db.services.find({}, {"_id": 0}).sort("name", 1).to_list(200)
     if user["role"] != "admin":
-        items = [s for s in items if s.get("active", True)]
+        items = [s for s in items if s.get("active", True) and not s.get("archived")]
     return items
 
 
 @api.post("/services")
-async def create_service(body: ServiceBody, _: dict = Depends(require_admin)):
+async def create_service(body: ServiceBody, user: dict = Depends(require_admin)):
     doc = body.model_dump()
     doc["id"] = str(uuid.uuid4())
     doc["created_at"] = now_utc().isoformat()
     await db.services.insert_one(doc.copy())
     doc.pop("_id", None)
+    await audit(user, "service.create", "service", doc["id"], None, doc)
     return doc
 
 
 @api.put("/services/{sid}")
-async def update_service(sid: str, body: ServiceBody, _: dict = Depends(require_admin)):
-    r = await db.services.update_one({"id": sid}, {"$set": body.model_dump()})
-    if r.matched_count == 0:
+async def update_service(sid: str, body: ServiceBody, user: dict = Depends(require_admin)):
+    before = await db.services.find_one({"id": sid}, {"_id": 0})
+    if not before:
         raise HTTPException(404, "Serviço não encontrado")
-    return await db.services.find_one({"id": sid}, {"_id": 0})
+    await db.services.update_one({"id": sid}, {"$set": body.model_dump()})
+    after = await db.services.find_one({"id": sid}, {"_id": 0})
+    changed = {k: after.get(k) for k in body.model_dump() if before.get(k) != after.get(k)}
+    if changed:
+        await audit(user, "service.update", "service", sid, {k: before.get(k) for k in changed}, changed)
+    return after
 
 
 @api.delete("/services/{sid}")
-async def delete_service(sid: str, _: dict = Depends(require_admin)):
+async def delete_service(sid: str, user: dict = Depends(require_admin)):
+    """Delete when safe; services with history are archived instead (history preserved)."""
+    svc = await db.services.find_one({"id": sid}, {"_id": 0})
+    if not svc:
+        raise HTTPException(404, "Serviço não encontrado")
+    used = await db.appointments.count_documents({"service_id": sid})
+    if used:
+        await db.services.update_one({"id": sid}, {"$set": {"archived": True, "active": False}})
+        await audit(user, "service.archive", "service", sid, svc, {"archived": True, "active": False})
+        return {"ok": True, "archived": True, "message": f"Serviço possui {used} atendimento(s) no histórico e foi arquivado em vez de excluído."}
     await db.services.delete_one({"id": sid})
-    return {"ok": True}
+    await audit(user, "service.delete", "service", sid, svc, None)
+    return {"ok": True, "archived": False}
 
 
 # =============================== settings ====================================
@@ -267,11 +385,19 @@ async def get_settings(user: dict = Depends(get_current_user)):
         await db.settings.insert_one(s.copy())
         s.pop("_id", None)
     s["shop"] = {**DEFAULT_SHOP, **(s.get("shop") or {})}
+    s["plan"] = {**DEFAULT_PLAN, **(s.get("plan") or {})}
+    s["general"] = {**DEFAULT_GENERAL, **(s.get("general") or {})}
+    pix = {**DEFAULT_PIX, **(s.get("pix") or {})}
+    if user["role"] != "admin":  # key is sensitive config: staff/clients only see the mode
+        pix = {"mode": pix["mode"], "configured": bool(pix["key"])}
+    s["pix"] = pix
     return s
 
 
 @api.put("/settings/shop")
-async def update_shop_info(body: ShopInfoBody, _: dict = Depends(require_admin)):
+async def update_shop_info(body: ShopInfoBody, user: dict = Depends(require_admin)):
+    s = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
+    before = {**DEFAULT_SHOP, **(s.get("shop") or {})}
     shop = body.model_dump()
     shop["whatsapp"] = "".join(ch for ch in shop["whatsapp"] if ch.isdigit())
     if len(shop["whatsapp"]) < 10:
@@ -279,6 +405,7 @@ async def update_shop_info(body: ShopInfoBody, _: dict = Depends(require_admin))
     if len(shop["whatsapp"]) <= 11:
         shop["whatsapp"] = "55" + shop["whatsapp"]
     await db.settings.update_one({"id": "main"}, {"$set": {"shop": shop}}, upsert=True)
+    await audit(user, "shop.update", "settings", "main", before, shop)
     return shop
 
 
@@ -286,28 +413,40 @@ async def update_shop_info(body: ShopInfoBody, _: dict = Depends(require_admin))
 async def public_info():
     """Public barbershop info for the landing page (no auth)."""
     s = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
-    services = await db.services.find({"active": {"$ne": False}}, {"_id": 0, "id": 1, "name": 1, "description": 1, "price": 1, "duration_min": 1}).sort("name", 1).to_list(200)
+    services = await db.services.find({"active": {"$ne": False}, "archived": {"$ne": True}}, {"_id": 0, "id": 1, "name": 1, "description": 1, "price": 1, "duration_min": 1, "image_url": 1}).sort("name", 1).to_list(200)
     days = sorted(s.get("days", []), key=lambda d: d["weekday"])
+    shop = {**DEFAULT_SHOP, **(s.get("shop") or {})}
+    plan = {**DEFAULT_PLAN, **(s.get("plan") or {})}
+    branding = s.get("branding") or {}
     return {
-        "name": "WENDEL CORTES",
-        "shop": {**DEFAULT_SHOP, **(s.get("shop") or {})},
+        "name": shop.get("name") or "WENDEL CORTES",
+        "shop": shop,
         "days": days,
-        "monthly_price": s.get("monthly_price", 89.90),
-        "monthly_cuts": s.get("monthly_cuts", 4),
+        "monthly_price": plan["price"],
+        "monthly_cuts": plan["cuts"],
+        "plan": plan,
         "services": services,
+        "general": {**DEFAULT_GENERAL, **(s.get("general") or {})},
+        "pix_mode": ({**DEFAULT_PIX, **(s.get("pix") or {})})["mode"],
+        "branding": {k: {"version": v.get("version"), "url": f"/api/public/branding/{k}?id={v.get('asset_id')}"} for k, v in branding.items()},
     }
 
 
 @api.put("/settings/day")
-async def update_day(body: DayConfigBody, _: dict = Depends(require_admin)):
+async def update_day(body: DayConfigBody, user: dict = Depends(require_admin)):
+    s = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
+    before = next((d for d in s.get("days", []) if d["weekday"] == body.weekday), None)
     await db.settings.update_one({"id": "main"}, {"$pull": {"days": {"weekday": body.weekday}}})
     await db.settings.update_one({"id": "main"}, {"$push": {"days": body.model_dump()}})
+    await audit(user, "hours.day.update", "settings", f"day:{body.weekday}", before, body.model_dump())
     return await db.settings.find_one({"id": "main"}, {"_id": 0})
 
 
 @api.put("/settings/cancel-hours")
-async def update_cancel_hours(body: CancelPolicyBody, _: dict = Depends(require_admin)):
+async def update_cancel_hours(body: CancelPolicyBody, user: dict = Depends(require_admin)):
+    s = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
     await db.settings.update_one({"id": "main"}, {"$set": {"cancel_hours": body.hours}})
+    await audit(user, "cancel_hours.update", "settings", "main", {"cancel_hours": s.get("cancel_hours")}, {"cancel_hours": body.hours})
     return {"ok": True}
 
 
@@ -406,11 +545,15 @@ async def create_appointment(body: AppointmentBody, user: dict = Depends(get_cur
     if not svc:
         raise HTTPException(404, "Serviço não encontrado")
     settings = await db.settings.find_one({"id": "main"}, {"_id": 0})
-    wd = datetime.strptime(body.date, "%Y-%m-%d").weekday()
+    wd = parse_date_or_400(body.date).weekday()
+    validate_time_or_400(body.time)
     day_cfg = next((x for x in settings["days"] if x["weekday"] == wd), None)
     if not day_cfg or day_cfg["mode"] != "agenda":
         raise HTTPException(400, "Este dia não aceita agendamentos")
     barber = await resolve_barber(body.date, body.time, svc["duration_min"], body.barber_id)
+    general = {**DEFAULT_GENERAL, **(settings.get("general") or {})}
+    if (not body.barber_id or body.barber_id == "any") and not general.get("allow_any_barber", True):
+        raise HTTPException(400, "Escolha um barbeiro específico")
 
     used_mensal = False
     if body.payment_method == "mensal":
@@ -422,6 +565,8 @@ async def create_appointment(body: AppointmentBody, user: dict = Depends(get_cur
         used_mensal = True
 
     status = "agendado" if used_mensal else "pagamento_pendente"
+    # payment: PIX is paid online (awaiting), card/cash are paid in person (pending until staff confirms)
+    payment_status = "pago" if used_mensal else ("aguardando_pagamento" if body.payment_method == "pix" else "pendente_confirmacao")
     apt = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -436,6 +581,7 @@ async def create_appointment(body: AppointmentBody, user: dict = Depends(get_cur
         "time": body.time,
         "duration_min": svc["duration_min"],
         "payment_method": body.payment_method,
+        "payment_status": payment_status,
         "status": status,
         "used_mensal": used_mensal,
         "mensal_consumed": False,
@@ -443,6 +589,8 @@ async def create_appointment(body: AppointmentBody, user: dict = Depends(get_cur
     }
     await db.appointments.insert_one(apt.copy())
     apt.pop("_id", None)
+    if body.payment_method == "pix" and not used_mensal:
+        apt["pix"] = await pix_for_appointment(db, apt)
     await send_push([user["id"]], {"title": "Agendamento confirmado", "message": f"{svc['name']} com {barber['name']} em {body.date} às {body.time}"})
     return apt
 
@@ -454,7 +602,7 @@ async def my_appointments(user: dict = Depends(get_current_user)):
 
 
 @api.get("/appointments")
-async def list_appointments(date: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None, barber_id: Optional[str] = None, _: dict = Depends(require_admin)):
+async def list_appointments(date: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None, barber_id: Optional[str] = None, user: dict = Depends(require_staff)):
     q: dict = {}
     if date:
         q["date"] = date
@@ -464,17 +612,27 @@ async def list_appointments(date: Optional[str] = None, from_date: Optional[str]
             q["date"]["$gte"] = from_date
         if to_date:
             q["date"]["$lte"] = to_date
-    if barber_id and barber_id != "all":
+    scope = barber_scope(user)
+    if scope:
+        q["barber_id"] = scope  # barbers only ever see their own agenda
+    elif barber_id and barber_id != "all":
         q["barber_id"] = barber_id
     items = await db.appointments.find(q, {"_id": 0}).sort([("date", 1), ("time", 1)]).to_list(2000)
     return items
 
 
 @api.put("/appointments/{aid}/status")
-async def update_appointment_status(aid: str, body: UpdateStatusBody, _: dict = Depends(require_admin)):
-    r = await db.appointments.update_one({"id": aid}, {"$set": {"status": body.status}})
-    if r.matched_count == 0:
+async def update_appointment_status(aid: str, body: UpdateStatusBody, user: dict = Depends(require_staff)):
+    apt = await db.appointments.find_one({"id": aid}, {"_id": 0})
+    if not apt:
         raise HTTPException(404, "Não encontrado")
+    scope = barber_scope(user)
+    if scope and apt.get("barber_id") != scope:
+        raise HTTPException(403, "Este atendimento pertence a outro barbeiro")
+    patch = {"status": body.status}
+    if body.status == "pago":
+        patch["payment_status"] = "pago"
+    await db.appointments.update_one({"id": aid}, {"$set": patch})
     apt = await db.appointments.find_one({"id": aid}, {"_id": 0})
     if body.status == "concluido" and apt.get("used_mensal") and not apt.get("mensal_consumed"):
         # Cliente Mensal: cut is consumed only when the service is actually completed
@@ -565,28 +723,33 @@ async def create_subscription(body: SubscriptionCreateBody, user: dict = Depends
     if existing:
         raise HTTPException(400, "Você já possui uma assinatura ativa")
     settings = await db.settings.find_one({"id": "main"}, {"_id": 0})
-    price = settings.get("monthly_price", 89.90)
-    cuts = settings.get("monthly_cuts", 4)
+    plan = {**DEFAULT_PLAN, **(settings.get("plan") or {})}
+    if not plan.get("active", True):
+        raise HTTPException(400, "O plano Cliente Mensal não está disponível no momento")
+    price = plan["price"]
+    cuts = plan["cuts"]
     status = "active" if body.payment_method in ("pix", "cartao") else "pending_payment"
     sub = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         "client_name": user["name"],
         "client_phone": user["phone"],
+        "plan_name": plan["name"],
+        "plan_snapshot": plan,  # preserves the rules that applied to this cycle
         "price": price,
         "cuts_total": cuts,
         "cuts_used": 0,
         "payment_method": body.payment_method,
         "status": status,
         "period_start": now_utc().isoformat(),
-        "period_end": (now_utc() + timedelta(days=30)).isoformat(),
+        "period_end": (now_utc() + timedelta(days=plan["cycle_days"])).isoformat(),
         "usage_history": [],
         "created_at": now_utc().isoformat(),
     }
     await db.subscriptions.insert_one(sub.copy())
     sub.pop("_id", None)
     if status == "active":
-        await send_push([user["id"]], {"title": "Assinatura ativada", "message": "Cliente Mensal ativo! 4 cortes disponíveis."})
+        await send_push([user["id"]], {"title": "Assinatura ativada", "message": f"{plan['name']} ativo! {cuts} cortes disponíveis."})
     return sub
 
 
@@ -664,9 +827,23 @@ async def queue_today(user: dict = Depends(get_current_user)):
         })
     my_entry = next((e for e in entries if e["user_id"] == user["id"]), None)
     my_pos = _queue_position(entries, my_entry) if my_entry else None
+    scope = barber_scope(user)
+    if scope:
+        # barbers see only their own queue (the founder admin sees all)
+        queues = [q for q in queues if q["barber_id"] == scope]
+        entries = [e for e in entries if e.get("barber_id") == scope]
+    elif user["role"] == "client":
+        # clients only see their own full entry; others are anonymized (no phone / user id)
+        entries = [public_queue_entry(e, user["id"]) for e in entries]
+        for q in queues:
+            q["entries"] = [public_queue_entry(e, user["id"]) for e in q["entries"]]
+    ahead = behind = None
+    if my_entry and my_pos:
+        same = [e for e in await db.queue.find({"date": today, "barber_id": my_entry.get("barber_id"), "status": "aguardando"}, {"_id": 0, "id": 1}).sort("joined_at", 1).to_list(500)]
+        ahead, behind = my_pos - 1, len(same) - my_pos
     return {
         "mode": mode, "entries": entries, "queues": queues,
-        "my_entry": my_entry, "my_position": my_pos,
+        "my_entry": my_entry, "my_position": my_pos, "ahead": ahead, "behind": behind,
         "my_barber_name": my_entry.get("barber_name") if my_entry else None,
         "total_waiting": len([e for e in entries if e["status"] == "aguardando"]),
     }
@@ -728,23 +905,33 @@ async def leave_queue(qid: str, user: dict = Depends(get_current_user)):
     if not e:
         raise HTTPException(404, "Não encontrado")
     if user["role"] != "admin" and e["user_id"] != user["id"]:
-        raise HTTPException(403, "Não autorizado")
+        if not (user["role"] == "barber" and e.get("barber_id") == user.get("barber_id")):
+            raise HTTPException(403, "Não autorizado")
     await db.queue.update_one({"id": qid}, {"$set": {"status": "cancelado"}})
     return {"ok": True}
 
 
-@api.post("/queue/{qid}/call")
-async def call_queue(qid: str, _: dict = Depends(require_admin)):
+async def staff_queue_entry(qid: str, user: dict) -> dict:
     e = await db.queue.find_one({"id": qid}, {"_id": 0})
     if not e:
         raise HTTPException(404, "Não encontrado")
+    scope = barber_scope(user)
+    if scope and e.get("barber_id") != scope:
+        raise HTTPException(403, "Esta fila pertence a outro barbeiro")
+    return e
+
+
+@api.post("/queue/{qid}/call")
+async def call_queue(qid: str, user: dict = Depends(require_staff)):
+    e = await staff_queue_entry(qid, user)
     await db.queue.update_one({"id": qid}, {"$set": {"status": "chamado", "called_at": now_utc().isoformat()}})
     await send_push([e["user_id"]], {"title": "É a sua vez!", "message": "O barbeiro está pronto para atendê-lo."})
     return {"ok": True}
 
 
 @api.post("/queue/{qid}/start")
-async def start_queue(qid: str, _: dict = Depends(require_admin)):
+async def start_queue(qid: str, user: dict = Depends(require_staff)):
+    await staff_queue_entry(qid, user)
     await db.queue.update_one({"id": qid}, {"$set": {"status": "em_atendimento", "started_at": now_utc().isoformat()}})
     return {"ok": True}
 
@@ -754,8 +941,8 @@ class CompleteQueueBody(BaseModel):
 
 
 @api.post("/queue/{qid}/complete")
-async def complete_queue(qid: str, body: CompleteQueueBody, _: dict = Depends(require_admin)):
-    e = await db.queue.find_one({"id": qid}, {"_id": 0})
+async def complete_queue(qid: str, body: CompleteQueueBody, user: dict = Depends(require_staff)):
+    e = await staff_queue_entry(qid, user)
     if not e:
         raise HTTPException(404, "Não encontrado")
     used_mensal = False
@@ -793,10 +980,8 @@ async def complete_queue(qid: str, body: CompleteQueueBody, _: dict = Depends(re
 
 
 @api.post("/queue/{qid}/noshow")
-async def noshow_queue(qid: str, _: dict = Depends(require_admin)):
-    e = await db.queue.find_one({"id": qid}, {"_id": 0})
-    if not e:
-        raise HTTPException(404, "Não encontrado")
+async def noshow_queue(qid: str, user: dict = Depends(require_staff)):
+    e = await staff_queue_entry(qid, user)
     await db.queue.update_one({"id": qid}, {"$set": {"status": "nao_compareceu"}})
     nxt = await _auto_call_next(e.get("barber_id"), e["date"]) if e["status"] == "chamado" else None
     return {"ok": True, "next_called": {"id": nxt["id"], "client_name": nxt["client_name"]} if nxt else None}
@@ -804,14 +989,22 @@ async def noshow_queue(qid: str, _: dict = Depends(require_admin)):
 
 # =============================== payments / dashboard =======================
 @api.get("/admin/dashboard")
-async def admin_dashboard(_: dict = Depends(require_admin)):
+async def admin_dashboard(user: dict = Depends(require_staff)):
     today = date.today().isoformat()
-    apts = await db.appointments.find({"date": today}, {"_id": 0}).to_list(500)
+    scope = barber_scope(user)
+    aq: dict = {"date": today}
+    if scope:
+        aq["barber_id"] = scope
+    apts = await db.appointments.find(aq, {"_id": 0}).to_list(500)
     done = [a for a in apts if a["status"] == "concluido"]
-    pending_pay = [a for a in apts if a["status"] == "pagamento_pendente"]
+    pending_pay = [a for a in apts if a.get("payment_status") in ("aguardando_pagamento", "pendente_confirmacao") or a["status"] == "pagamento_pendente"]
     revenue = sum(a.get("price", 0) for a in done)
-    q = await db.queue.find({"date": today, "status": {"$in": ["aguardando", "chamado", "em_atendimento"]}}, {"_id": 0}).to_list(200)
+    qq: dict = {"date": today, "status": {"$in": ["aguardando", "chamado", "em_atendimento"]}}
+    if scope:
+        qq["barber_id"] = scope
+    q = await db.queue.find(qq, {"_id": 0}).to_list(200)
     active_subs = await db.subscriptions.count_documents({"status": "active"})
+    working = await available_barbers(db, today)
     return {
         "date": today,
         "appointments_total": len(apts),
@@ -820,7 +1013,9 @@ async def admin_dashboard(_: dict = Depends(require_admin)):
         "revenue_today": revenue,
         "pending_payments": len(pending_pay),
         "active_subscriptions": active_subs,
-        "upcoming": sorted([a for a in apts if a["status"] in ["agendado", "pago", "pagamento_pendente"]], key=lambda x: x["time"])[:10],
+        "barbers_working": [{"id": b["id"], "name": b["name"], "window": b["window"]} for b in working],
+        "clients_total": await db.users.count_documents({"role": "client"}),
+        "upcoming": sorted([a for a in apts if a["status"] in ["agendado", "pago", "pagamento_pendente", "cliente_chegou"]], key=lambda x: x["time"])[:10],
     }
 
 
@@ -852,9 +1047,10 @@ async def finance(_: dict = Depends(require_admin)):
 
 # =============================== push registration =========================
 @api.post("/register-push", status_code=201)
-async def register_push(body: RegisterPushBody):
+async def register_push(body: RegisterPushBody, user: dict = Depends(get_current_user)):
+    payload = {**body.model_dump(), "user_id": user["id"]}  # bind to the authenticated user
     try:
-        resp = await _push_client.post("/api/v1/push/users/register", json=body.model_dump())
+        resp = await _push_client.post("/api/v1/push/users/register", json=payload)
         if resp.status_code == 401:
             raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
     except HTTPException:
@@ -866,17 +1062,24 @@ async def register_push(body: RegisterPushBody):
 
 # =============================== seed =========================================
 @api.post("/seed")
+async def seed_endpoint(_: dict = Depends(require_admin)):
+    """Re-run the idempotent seed (admin only)."""
+    return await seed()
+
+
 async def seed():
-    """Idempotent demo data seed."""
-    # admin
+    """Idempotent seed: admin + settings + services + barbers always; demo clients/data only when SEED_DEMO_DATA=true."""
+    # admin (password from ADMIN_PASSWORD env; only used when the account does not exist yet)
     admin = await db.users.find_one({"email": "admin@wendelcortes.com"})
     if not admin:
         admin_id = str(uuid.uuid4())
         await db.users.insert_one({
             "id": admin_id, "name": "Wendel Cortes", "phone": "11999999999",
-            "email": "admin@wendelcortes.com", "password_hash": hash_password("admin123"),
+            "email": "admin@wendelcortes.com", "password_hash": hash_password(ADMIN_PASSWORD),
             "role": "admin", "created_at": now_utc().isoformat(),
         })
+        if ADMIN_PASSWORD == "admin123":
+            logger.warning("Admin criado com a senha padrão. Defina ADMIN_PASSWORD no .env antes de publicar!")
 
     # settings
     if not await db.settings.find_one({"id": "main"}):
@@ -910,7 +1113,29 @@ async def seed():
             doc = {**s, "id": str(uuid.uuid4()), "active": True, "created_at": now_utc().isoformat()}
             await db.services.insert_one(doc)
 
-    # sample clients
+    # barbers (Wendel: Mon–Sat 09–18 · João: Tue–Sat 10–20)
+    if await db.barbers.count_documents({}) == 0:
+        wendel_hours = [{"weekday": i, "enabled": i < 6, "start": "09:00", "end": "18:00"} for i in range(7)]
+        joao_hours = [{"weekday": i, "enabled": 1 <= i <= 5, "start": "10:00", "end": "20:00"} for i in range(7)]
+        await db.barbers.insert_many([
+            {"id": str(uuid.uuid4()), "name": "Wendel", "phone": "11999999999", "photo_url": "",
+             "description": "Fundador · especialista em cortes clássicos e degradê", "active": True,
+             "work_hours": wendel_hours, "commission_pct": None, "created_at": now_utc().isoformat()},
+            {"id": str(uuid.uuid4()), "name": "João", "phone": "11988880000", "photo_url": "",
+             "description": "Barba, navalha e visagismo", "active": True,
+             "work_hours": joao_hours, "commission_pct": None, "created_at": now_utc().isoformat()},
+        ])
+    wendel = await db.barbers.find_one({"name": "Wendel"}, {"_id": 0}) or await db.barbers.find_one({}, {"_id": 0})
+    # migrate legacy records without barber → Wendel
+    if wendel:
+        await db.appointments.update_many({"barber_id": {"$exists": False}}, {"$set": {"barber_id": wendel["id"], "barber_name": wendel["name"]}})
+        await db.queue.update_many({"barber_id": {"$exists": False}}, {"$set": {"barber_id": wendel["id"], "barber_name": wendel["name"]}})
+
+    if not SEED_DEMO_DATA:
+        logger.info("Seed OK (sem dados de demonstração)")
+        return {"ok": True, "admin": "admin@wendelcortes.com", "demo": False}
+
+    # ---------------- demo data below (development only: SEED_DEMO_DATA=true) ----------------
     sample_clients = [
         ("Carlos Silva", "11987654321", "carlos@test.com"),
         ("João Pereira", "11988887777", "joao@test.com"),
@@ -948,24 +1173,6 @@ async def seed():
             "period_end": (now_utc() + timedelta(days=30)).isoformat(),
             "usage_history": [], "created_at": now_utc().isoformat(),
         })
-
-    # barbers (Wendel: Mon–Sat 09–18 · João: Tue–Sat 10–20)
-    if await db.barbers.count_documents({}) == 0:
-        wendel_hours = [{"weekday": i, "enabled": i < 6, "start": "09:00", "end": "18:00"} for i in range(7)]
-        joao_hours = [{"weekday": i, "enabled": 1 <= i <= 5, "start": "10:00", "end": "20:00"} for i in range(7)]
-        await db.barbers.insert_many([
-            {"id": str(uuid.uuid4()), "name": "Wendel", "phone": "11999999999", "photo_url": "",
-             "description": "Fundador · especialista em cortes clássicos e degradê", "active": True,
-             "work_hours": wendel_hours, "commission_pct": None, "created_at": now_utc().isoformat()},
-            {"id": str(uuid.uuid4()), "name": "João", "phone": "11988880000", "photo_url": "",
-             "description": "Barba, navalha e visagismo", "active": True,
-             "work_hours": joao_hours, "commission_pct": None, "created_at": now_utc().isoformat()},
-        ])
-    wendel = await db.barbers.find_one({"name": "Wendel"}, {"_id": 0}) or await db.barbers.find_one({}, {"_id": 0})
-    # migrate legacy records without barber → Wendel
-    if wendel:
-        await db.appointments.update_many({"barber_id": {"$exists": False}}, {"$set": {"barber_id": wendel["id"], "barber_name": wendel["name"]}})
-        await db.queue.update_many({"barber_id": {"$exists": False}}, {"$set": {"barber_id": wendel["id"], "barber_name": wendel["name"]}})
 
     # sample appointments today (agenda mode weekdays)
     corte = await db.services.find_one({"name": "Corte"})
@@ -1011,11 +1218,13 @@ async def root():
 
 
 app.include_router(api)
-app.include_router(make_barbers_router(db, get_current_user, require_admin, now_utc), prefix="/api")
+app.include_router(make_barbers_router(db, get_current_user, require_admin, now_utc, audit), prefix="/api")
+app.include_router(make_config_router(db, get_current_user, require_admin, require_staff, now_utc, hash_password, audit), prefix="/api")
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
+    # Bearer tokens are used (no cookies), so credentials are only allowed when origins are explicit (CORS_ORIGINS env)
+    allow_credentials=CORS_ORIGINS != ["*"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

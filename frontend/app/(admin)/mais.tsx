@@ -5,10 +5,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing, radius } from "@/src/theme";
 import { api, clearSession } from "@/src/api";
 import { GhostButton, GoldButton } from "@/src/ui";
+import { refreshBranding } from "@/src/branding";
+import { ServicesSection } from "@/src/admin/services-section";
+import { BrandingSection, PlanSection, PixSection, PaymentsSection, GeneralSection, AuditSection, ResetCodesSection } from "@/src/admin/config-sections";
 
 export default function Mais() {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<"services" | "settings" | "shop" | "clients" | "finance" | "reports">("services");
+  const [tab, setTab] = useState<string>("branding");
   const [reportDays, setReportDays] = useState<number>(30);
   const [reports, setReports] = useState<any>(null);
   useEffect(() => {
@@ -42,16 +45,12 @@ export default function Mais() {
     try {
       const saved = await api("/settings/shop", { method: "PUT", body: JSON.stringify(shop) });
       setShop(saved);
+      refreshBranding();
       setShopMsg("Dados da barbearia salvos!");
     } catch (e: any) { setShopErr(e.message); }
     finally { setSavingShop(false); }
   };
 
-  const updateSvc = async (id: string, patch: any) => {
-    const s = services.find((x) => x.id === id); if (!s) return;
-    await api(`/services/${id}`, { method: "PUT", body: JSON.stringify({ ...s, ...patch }) });
-    await load();
-  };
   const updateDay = async (weekday: number, mode: string) => {
     const d = settings.days.find((x: any) => x.weekday === weekday);
     await api("/settings/day", { method: "PUT", body: JSON.stringify({ weekday, mode, open_time: d.open_time, close_time: d.close_time }) });
@@ -64,46 +63,33 @@ export default function Mais() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
       <View style={{ paddingTop: insets.top + spacing.lg, paddingHorizontal: spacing.xl, width: "100%", maxWidth: 760, alignSelf: "center" }}>
-        <Text style={styles.h1}>Mais</Text>
+        <Text style={styles.h1}>Configurações da Barbearia</Text>
+        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Centro de controle do Administrador Fundador</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.md }}>
           {[
+            { k: "branding", l: "Identidade Visual" },
+            { k: "shop", l: "Informações" },
             { k: "services", l: "Serviços" },
+            { k: "plan", l: "Cliente Mensal" },
+            { k: "team", l: "Equipe / Barbeiros" },
+            { k: "payments", l: "Pagamentos" },
+            { k: "pix", l: "PIX" },
             { k: "settings", l: "Horários" },
-            { k: "shop", l: "Barbearia" },
+            { k: "general", l: "Agenda · Fila · Notificações" },
             { k: "clients", l: "Clientes" },
+            { k: "resets", l: "Recuperação de senha" },
             { k: "finance", l: "Financeiro" },
             { k: "reports", l: "Relatórios" },
+            { k: "audit", l: "Auditoria" },
           ].map((t) => (
-            <Pressable key={t.k} testID={`tab-${t.k}`} onPress={() => setTab(t.k as any)} style={[styles.chip, tab === t.k && styles.chipSel]}>
+            <Pressable key={t.k} testID={`tab-${t.k}`} onPress={() => (t.k === "team" ? router.push("/(admin)/barbeiros") : setTab(t.k as any))} style={[styles.chip, tab === t.k && styles.chipSel]}>
               <Text style={[styles.chipTxt, tab === t.k && { color: colors.onBrandPrimary }]}>{t.l}</Text>
             </Pressable>
           ))}
         </ScrollView>
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: spacing["3xl"], width: "100%", maxWidth: 760, alignSelf: "center" }}>
-        {tab === "services" && services.map((s) => (
-          <View key={s.id} style={styles.card}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.name}>{s.name}</Text>
-                <Text style={styles.meta}>{s.duration_min} min</Text>
-              </View>
-              <Pressable testID={`toggle-${s.id}`} onPress={() => updateSvc(s.id, { active: !s.active })} style={[styles.pill, { backgroundColor: s.active ? colors.brandPrimary : colors.surfaceTertiary }]}>
-                <Text style={{ color: s.active ? colors.onBrandPrimary : colors.muted, fontWeight: "700", fontSize: 12 }}>{s.active ? "ATIVO" : "INATIVO"}</Text>
-              </Pressable>
-            </View>
-            <View style={{ flexDirection: "row", gap: spacing.md, marginTop: spacing.md }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.lbl}>Preço R$</Text>
-                <TextInput style={styles.input} keyboardType="decimal-pad" defaultValue={String(s.price)} onEndEditing={(e) => updateSvc(s.id, { price: Number(e.nativeEvent.text) })} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.lbl}>Duração (min)</Text>
-                <TextInput style={styles.input} keyboardType="number-pad" defaultValue={String(s.duration_min)} onEndEditing={(e) => updateSvc(s.id, { duration_min: Number(e.nativeEvent.text) })} />
-              </View>
-            </View>
-          </View>
-        ))}
+        {tab === "services" && <ServicesSection services={services} onChanged={load} />}
 
         {tab === "settings" && settings && (
           <View>
@@ -129,7 +115,11 @@ export default function Mais() {
           <View>
             <Text style={styles.sec}>Dados públicos da barbearia</Text>
             <View style={styles.card}>
-              <Text style={styles.lbl}>WhatsApp (com DDD)</Text>
+              <Text style={styles.lbl}>Nome da barbearia</Text>
+              <TextInput testID="shop-name-input" style={styles.input} value={shop.name || ""} onChangeText={(v) => setShop({ ...shop, name: v })} placeholder="WENDEL CORTES" placeholderTextColor={colors.muted} />
+              <Text style={[styles.lbl, { marginTop: spacing.md }]}>Telefone fixo / contato</Text>
+              <TextInput testID="shop-phone-input" style={styles.input} keyboardType="phone-pad" value={shop.phone || ""} onChangeText={(v) => setShop({ ...shop, phone: v })} placeholder="(11) 0000-0000" placeholderTextColor={colors.muted} />
+              <Text style={[styles.lbl, { marginTop: spacing.md }]}>WhatsApp (com DDD)</Text>
               <TextInput
                 testID="shop-whatsapp-input"
                 style={styles.input}
@@ -203,6 +193,14 @@ export default function Mais() {
             </View>
           </View>
         )}
+
+        {tab === "branding" && <BrandingSection />}
+        {tab === "plan" && settings && <PlanSection settings={settings} onSaved={load} />}
+        {tab === "pix" && settings && <PixSection settings={settings} onSaved={load} />}
+        {tab === "payments" && <PaymentsSection />}
+        {tab === "general" && settings && <GeneralSection settings={settings} onSaved={load} />}
+        {tab === "audit" && <AuditSection />}
+        {tab === "resets" && <ResetCodesSection />}
 
         {tab === "reports" && (
           <View style={{ gap: spacing.md }}>

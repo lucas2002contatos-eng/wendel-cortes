@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="1" tests="78" time="63.323" timestamp="2026-10-03T21:03:28.666187+00:00" hostname="agent-env-b6a286cd-f4e4-4cff-aa64-01398b4df052"><testcase classname="tests.backend_test" name="test_admin_login" time="0.878" /><testcase classname="tests.test_security.TestInputValidation" name="test_appointment_bad_date_400" time="37.748" /><testcase classname="tests.backend_test" name="test_client_login" time="0.344" /><testcase classname="tests.backend_test" name="test_register_new_client" time="5.546" /><testcase classname="tests.backend_test" name="test_services_list" time="0.543" /><testcase classname="tests.backend_test" name="test_agenda_available_slots" time="0.263" /><testcase classname="tests.backend_test" name="test_appointment_create_and_duplicate" time="7.323" /><testcase classname="tests.backend_test" name="test_subscription_me_carlos" time="0.119" /><testcase classname="tests.backend_test" name="test_queue_today" time="0.105" /><testcase classname="tests.backend_test" name="test_queue_join_behavior" time="20.079" /><testcase classname="tests.backend_test" name="test_admin_dashboard" time="0.466" /><testcase classname="tests.backend_test" name="test_admin_subscriptions" time="0.128" /><testcase classname="tests.backend_test" name="test_settings_day_update" time="0.108" /><testcase classname="tests.backend_test" name="test_appointment_mensal_flow" time="1.164"><skipped type="pytest.skip" message="joao's mensal cycle exhausted by prior test runs">/app/backend/tests/backend_test.py:155: joao's mensal cycle exhausted by prior test runs</skipped></testcase><testcase classname="tests.test_security.TestInputValidation" name="test_appointment_bad_time_400" time="0.582" /><testcase classname="tests.test_barbers.TestAdminBarbersCrud" name="test_create_pedro_saturday_only" time="1.255" /><testcase classname="tests.test_barbers.TestAdminBarbersCrud" name="test_deactivate_hides_from_client" time="0.572" /><testcase classname="tests.test_security.TestInputValidation" name="test_barber_block_bad_date_422" time="0.557" /><testcase classname="tests.test_security.TestInputValidation" name="test_barber_block_bad_time_422" time="0.580" /><testcase classname="tests.test_barbers.TestAdminBarbersCrud" name="test_update_workhours_jackson_monday" time="0.911" /><testcase classname="tests.test_security.TestInputValidation" name="test_update_barber_bad_work_hours_422" time="0.573" /><testcase classname="tests.test_barbers.TestAdminBarbersCrud" name="test_block_hides_slot_delete_restores" time="1.047" /><testcase classname="tests.test_security.TestInputValidation" name="test_barbers_available_bad_date_400" time="0.479" /><testcase classname="tests.test_security.TestInputValidation" name="test_barbers_schedule_bad_date_400" time="0.460" /><testcase classname="tests.test_barbers.TestAdminBarbersCrud" name="test_day_override_adds_and_removes" time="1.157" /><testcase classname="tests.test_new_features.TestShopUpdate" name="test_admin_normalizes_whatsapp" time="0.574" /><testcase classname="tests.test_new_features.TestShopUpdate" name="test_admin_rejects_short_whatsapp" time="0.111" /><testcase classname="tests.test_new_features.TestShopUpdate" name="test_non_admin_forbidden" time="0.458" /><testcase classname="tests.test_barbers.TestAdminBarbersCrud" name="test_zz_cleanup_pedro" time="0.164" /><testcase classname="tests.test_new_features.TestShopUpdate" name="test_no_auth_forbidden" time="0.118" /><testcase classname="tests.test_new_features.TestShopUpdate" name="test_ten_digits_gets_55_prefix" time="0.299" /><testcase classname="tests.test_new_features.TestConfirmPresence" name="test_owner_confirms_presence" time="0.712" /><testcase classname="tests.test_security.TestJWT" name="test_old_dev_secret_token_rejected" time="0.127" /><testcase classname="tests.test_security.TestJWT" name="test_random_secret_token_rejected" time="0.113" /><testcase classname="tests.test_security.TestJWT" name="test_valid_token_accepted" time="0.561" /><testcase classname="tests.test_new_features.TestConfirmPresence" name="test_other_user_forbidden" time="0.801" /><testcase classname="tests.test_security.TestJWT" name="test_token_expires_in_about_7_days" time="0.343" /><testcase classname="tests.test_security.TestHardening" name="test_register_weak_password_400" time="0.110" /><testcase classname="tests.test_security.TestHardening" name="test_register_duplicate_neutral_message" time="0.234" /><testcase classname="tests.test_security.TestHardening" name="test_register_push_requires_auth" time="0.120" /><testcase classname="tests.test_new_features.TestConfirmPresence" name="test_admin_agenda_shows_confirmed" time="1.258" /><testcase classname="tests.test_security.TestHardening" name="test_cors_origin_is_not_credentialed_wildcard" time="0.126" /><testcase classname="tests.test_new_features.TestConfirmPresence" name="test_nonexistent_appointment_404" time="0.125" /><testcase classname="tests.test_barbers.TestBarbersList" name="test_list_contains_wendel_and_joao" time="0.476" /><testcase classname="tests.test_barbers.TestPerBarberConflict" name="test_different_barbers_same_time_both_ok" time="1.275"><failure message="AssertionError: {&quot;detail&quot;:&quot;Wendel não está disponível neste horário&quot;}&#10;assert 409 == 200&#10; +  where 409 = &lt;Response [409]&gt;.status_code">self = &lt;test_barbers.TestPerBarberConflict object at 0xfe9274038a50&gt;
+carlos_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzM2JhMWE4MC1iNTJjLTRjMzgtOTk2OS1iOGU5YTNiMWY3ZjgiLCJyb2xlIjoiY2xpZW50IiwiZXhwIjoxNzkxNjY2MjUzfQ.OGyqAGYaxq0YkHp_IOInzUqJzHJ_vZmaAfqDb7skf8w'
+jackson_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NzczMjVjYy04YjU3LTRmOTktOGM0OC1kMTRjMzBmZTlmNWEiLCJyb2xlIjoiY2xpZW50IiwiZXhwIjoxNzkxNjY2MjUzfQ.ZwZmc8ma-kkzgHyuWf-shFWSln5EdqMTSOzSU5HbNtg'
+services = {'Alisante': {'name': 'Alisante', 'description': 'Alisamento capilar profissional', 'price': 120.0, 'duration_min': 60...+ Barba': {'name': 'Corte + Barba', 'description': 'Combo corte e barba', 'price': 70.0, 'duration_min': 60, ...}, ...}
+barbers = {'Jackson': {'id': 'ef279516-0bd3-4239-8494-e40426a751dd', 'name': 'Jackson', 'photo_url': '', 'description': '', ...}...dc40', 'name': 'Wendel', 'photo_url': '', 'description': 'Fundador · especialista em cortes clássicos e degradê', ...}}
+booking_tuesday_date = '2026-10-20'
+
+    def test_different_barbers_same_time_both_ok(self, carlos_token, jackson_token, services, barbers, booking_tuesday_date):
+        corte = services["Corte"]
+        d = booking_tuesday_date
+        time = "14:00"
+        r1 = requests.post(f"{BASE}/appointments",
+                           json={"service_id": corte["id"], "date": d, "time": time, "payment_method": "pix", "barber_id": barbers["Wendel"]["id"]},
+                           headers=H(carlos_token))
+&gt;       assert r1.status_code == 200, r1.text
+E       AssertionError: {"detail":"Wendel não está disponível neste horário"}
+E       assert 409 == 200
+E        +  where 409 = &lt;Response [409]&gt;.status_code
+
+backend/tests/test_barbers.py:152: AssertionError</failure></testcase><testcase classname="tests.test_barbers.TestBarbersList" name="test_available_tuesday_has_both" time="0.120" /><testcase classname="tests.test_barbers.TestBarbersList" name="test_available_monday_only_wendel" time="0.292" /><testcase classname="tests.test_barbers.TestPerBarberConflict" name="test_same_barber_same_time_conflict" time="0.485" /><testcase classname="tests.test_security.TestQueueAnonymization" name="test_client_sees_others_abbreviated_without_phone" time="0.508" /><testcase classname="tests.test_barbers.TestPerBarberConflict" name="test_wendel_14_excluded_but_15_still_free" time="0.249" /><testcase classname="tests.test_security.TestSeedProtection" name="test_seed_without_token_401" time="0.123" /><testcase classname="tests.test_security.TestSeedProtection" name="test_seed_with_client_token_403" time="0.574" /><testcase classname="tests.test_security.TestQueueAnonymization" name="test_queues_entries_also_anonymized_for_client" time="0.878" /><testcase classname="tests.test_security.TestSeedProtection" name="test_seed_admin_idempotent" time="1.249"><failure message="AssertionError: expected 7 default services, got 10&#10;assert 10 == 7&#10; +  where 10 = len([{'name': 'Alisante', 'description': 'Alisamento capilar profissional', 'price': 120.0, 'duration_min': 60, ...}, {'na...5, ...}, {'name': 'Progressiva', 'description': 'Progressiva masculina', 'price': 150.0, 'duration_min': 90, ...}, ...])">self = &lt;test_security.TestSeedProtection object at 0xfe92742f6f10&gt;
+
+    def test_seed_admin_idempotent(self):
+        tok = admin_token()
+        before_services = requests.get(f"{BASE}/services", headers=auth(tok)).json()
+        before_barbers = requests.get(f"{BASE}/barbers", headers=auth(tok)).json()
+        r = requests.post(f"{BASE}/seed", headers=auth(tok))
+        assert r.status_code == 200, r.text
+        after_services = requests.get(f"{BASE}/services", headers=auth(tok)).json()
+        after_barbers = requests.get(f"{BASE}/barbers", headers=auth(tok)).json()
+        assert len(after_services) == len(before_services), f"services duplicated: {len(before_services)} → {len(after_services)}"
+&gt;       assert len(after_services) == 7, f"expected 7 default services, got {len(after_services)}"
+E       AssertionError: expected 7 default services, got 10
+E       assert 10 == 7
+E        +  where 10 = len([{'name': 'Alisante', 'description': 'Alisamento capilar profissional', 'price': 120.0, 'duration_min': 60, ...}, {'na...5, ...}, {'name': 'Progressiva', 'description': 'Progressiva masculina', 'price': 150.0, 'duration_min': 90, ...}, ...])
+
+backend/tests/test_security.py:141: AssertionError</failure></testcase><testcase classname="tests.test_security.TestQueueAnonymization" name="test_admin_sees_full_entries" time="0.459" /><testcase classname="tests.test_admin_center.TestBranding" name="test_logo_upload_history_restore" time="1.865" /><testcase classname="tests.test_admin_center.TestPasswordRecovery" name="test_forgot_reset_login" time="2.140" /><testcase classname="tests.test_admin_center.TestBranding" name="test_favicon_upload" time="0.115" /><testcase classname="tests.test_admin_center.TestPix" name="test_shop_mode_payload_valid" time="1.415" /><testcase classname="tests.test_admin_center.TestPasswordRecovery" name="test_carlos_password_preserved" time="1.130" /><testcase classname="tests.test_admin_center.TestPix" name="test_barber_mode_uses_barber_key" time="1.437" /><testcase classname="tests.test_admin_center.TestPaymentStatuses" name="test_cartao_dinheiro_flow_and_admin_pago" time="1.443" /><testcase classname="tests.test_admin_center.TestPaymentStatuses" name="test_barber_cannot_confirm_other_barber_payment" time="1.599" /><testcase classname="tests.test_barbers.TestQueuePerBarber" name="test_join_wendel_and_jackson_independent_queues" time="2.463" /><testcase classname="tests.test_admin_center.TestServicePrice" name="test_update_price_reflects_in_new_appointment_and_audit" time="1.122" /><testcase classname="tests.test_barbers.TestQueuePerBarber" name="test_admin_call_start_complete_calls_next_same_barber" time="1.656"><failure message="AssertionError: Jackson queue was auto-affected&#10;assert False&#10; +  where False = all(&lt;generator object TestQueuePerBarber.test_admin_call_start_complete_calls_next_same_barber.&lt;locals&gt;.&lt;genexpr&gt; at 0xf996c4483bc0&gt;)">self = &lt;test_barbers.TestQueuePerBarber object at 0xf996c436a7d0&gt;
+admin_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4M2JhZmY2Ny03YWJiLTQ0ZTctYTU2Ny0wYmM5Mjk2ZjYxMmUiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3OTE2NjYyNjR9.yZWPuA_f51NOMLCkGDYtczNQZqOHFivnycf9AlzEsYs'
+lucas_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyZWM5YmQzNS1lZTk4LTRkMjUtODdlNy0zYzcwYjM2ODcwODQiLCJyb2xlIjoiY2xpZW50IiwiZXhwIjoxNzkxNjY2MjYxfQ.nth6EAJ05_qr6CmmqcopROZcvUucEhG9IQ4Uhqaxdg0'
+services = {'Alisante': {'name': 'Alisante', 'description': 'Alisamento capilar profissional', 'price': 120.0, 'duration_min': 60...+ Barba': {'name': 'Corte + Barba', 'description': 'Combo corte e barba', 'price': 70.0, 'duration_min': 60, ...}, ...}
+barbers = {'Jackson': {'id': 'ef279516-0bd3-4239-8494-e40426a751dd', 'name': 'Jackson', 'photo_url': '', 'description': '', ...}...dc40', 'name': 'Wendel', 'photo_url': '', 'description': 'Fundador · especialista em cortes clássicos e degradê', ...}}
+
+    def test_admin_call_start_complete_calls_next_same_barber(self, admin_token, lucas_token, services, barbers):
+        today_info = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
+        if today_info["mode"] != "fila":
+            pytest.skip("not fila mode")
+        wendel_queue = next((q for q in today_info["queues"] if q["barber_name"] == "Wendel"), None)
+        assert wendel_queue, "no Wendel queue group"
+        waiting = [e for e in wendel_queue["entries"] if e["status"] == "aguardando"]
+        if len(waiting) &lt; 2:
+            # add another waiting Wendel client (register fresh)
+            email = f"test_wq_{uuid.uuid4().hex[:8]}@test.com"
+            tok2 = requests.post(f"{BASE}/auth/register", json={"name": "TEST WQ", "phone": "11900", "email": email, "password": "cliente123"}).json()["token"]
+            corte = services["Corte"]
+            requests.post(f"{BASE}/queue/join",
+                          json={"service_id": corte["id"], "barber_id": barbers["Wendel"]["id"]},
+                          headers=H(tok2))
+            today_info = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
+            wendel_queue = next(q for q in today_info["queues"] if q["barber_name"] == "Wendel")
+            waiting = [e for e in wendel_queue["entries"] if e["status"] == "aguardando"]
+        first = waiting[0]
+        expected_next_id = waiting[1]["id"]
+    
+        r = requests.post(f"{BASE}/queue/{first['id']}/call", headers=H(admin_token))
+        assert r.status_code == 200
+        r = requests.post(f"{BASE}/queue/{first['id']}/start", headers=H(admin_token))
+        assert r.status_code == 200
+        r = requests.post(f"{BASE}/queue/{first['id']}/complete", json={"use_mensal": False}, headers=H(admin_token))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body.get("next_called"), "no next_called returned"
+        assert body["next_called"]["id"] == expected_next_id
+    
+        # verify Jackson queue not affected
+        today2 = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
+        jackson_q = next((q for q in today2["queues"] if q["barber_name"] == "Jackson"), None)
+        if jackson_q and jackson_q["entries"]:
+&gt;           assert all(e["status"] in ("aguardando",) for e in jackson_q["entries"] if e["status"] != "chamado" or e.get("auto_called") is not True), "Jackson queue was auto-affected"
+E           AssertionError: Jackson queue was auto-affected
+E           assert False
+E            +  where False = all(&lt;generator object TestQueuePerBarber.test_admin_call_start_complete_calls_next_same_barber.&lt;locals&gt;.&lt;genexpr&gt; at 0xf996c4483bc0&gt;)
+
+backend/tests/test_barbers.py:324: AssertionError</failure></testcase><testcase classname="tests.test_admin_center.TestServicesLifecycle" name="test_create_delete_archive_and_cleanup" time="1.130" /><testcase classname="tests.test_admin_center.TestBarberAccountAndRBAC" name="test_barber_login_scope" time="2.485" /><testcase classname="tests.test_admin_center.TestPlan" name="test_update_plan_and_new_subscriber" time="1.476" /><testcase classname="tests.test_admin_center.TestAuthMe" name="test_update_name_phone" time="0.563" /><testcase classname="tests.test_admin_center.TestAudit" name="test_audit_entries_present" time="0.131" /><testcase classname="tests.test_admin_center.TestGeneral" name="test_allow_any_barber_toggle" time="1.038" /><testcase classname="tests.test_barbers.TestAnyAutoPick" name="test_any_booking_picks_a_barber" time="1.047"><failure message="AssertionError: {&quot;detail&quot;:&quot;Escolha um barbeiro específico&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">self = &lt;test_barbers.TestAnyAutoPick object at 0xf996c436bb10&gt;
+lucas_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyZWM5YmQzNS1lZTk4LTRkMjUtODdlNy0zYzcwYjM2ODcwODQiLCJyb2xlIjoiY2xpZW50IiwiZXhwIjoxNzkxNjY2MjY4fQ.rkaUMkj4T2X64mCPyIDLakC-waDVTJcqdq7VdAM_m94'
+services = {'Alisante': {'name': 'Alisante', 'description': 'Alisamento capilar profissional', 'price': 120.0, 'duration_min': 60...+ Barba': {'name': 'Corte + Barba', 'description': 'Combo corte e barba', 'price': 70.0, 'duration_min': 60, ...}, ...}
+
+    def test_any_booking_picks_a_barber(self, lucas_token, services):
+        corte = services["Corte"]
+        d = _next_weekday(1).isoformat()
+        slots = requests.get(f"{BASE}/agenda/available/{d}?service_id={corte['id']}&amp;barber_id=any", headers=H(lucas_token)).json()["slots"]
+        # pick a late slot likely free
+        free_time = next((s["time"] for s in slots if s["time"] &gt;= "17:00"), slots[-1]["time"])
+        r = requests.post(f"{BASE}/appointments",
+                          json={"service_id": corte["id"], "date": d, "time": free_time, "payment_method": "pix"},
+                          headers=H(lucas_token))
+&gt;       assert r.status_code == 200, r.text
+E       AssertionError: {"detail":"Escolha um barbeiro específico"}
+E       assert 400 == 200
+E        +  where 400 = &lt;Response [400]&gt;.status_code
+
+backend/tests/test_barbers.py:192: AssertionError</failure></testcase><testcase classname="tests.test_barbers.TestMensal" name="test_mensal_reserved_at_booking_consumed_on_concluido" time="1.447"><failure message="AssertionError: {&quot;detail&quot;:&quot;Você já utilizou (ou reservou) todos os cortes do ciclo atual&quot;}&#10;assert 400 == 200&#10; +  where 400 = &lt;Response [400]&gt;.status_code">self = &lt;test_barbers.TestMensal object at 0xf996c436a1d0&gt;
+admin_token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4M2JhZmY2Ny03YWJiLTQ0ZTctYTU2Ny0wYmM5Mjk2ZjYxMmUiLCJyb2xlIjoiYWRtaW4iLCJleHAiOjE3OTE2NjYyNjl9.cYn_uURHx7f6OvKBxq4QmDrGYXSbaV3Mxr4bPta_-L8'
+services = {'Alisante': {'name': 'Alisante', 'description': 'Alisamento capilar profissional', 'price': 120.0, 'duration_min': 60...+ Barba': {'name': 'Corte + Barba', 'description': 'Combo corte e barba', 'price': 70.0, 'duration_min': 60, ...}, ...}
+barbers = {'Jackson': {'id': 'ef279516-0bd3-4239-8494-e40426a751dd', 'name': 'Jackson', 'photo_url': '', 'description': '', ...}...dc40', 'name': 'Wendel', 'photo_url': '', 'description': 'Fundador · especialista em cortes clássicos e degradê', ...}}
+
+    def test_mensal_reserved_at_booking_consumed_on_concluido(self, admin_token, services, barbers):
+        """Full lifecycle for carlos: book mensal, verify no consume, admin complete → consume + usage_history."""
+        tok = _login("carlos@test.com", "cliente123")
+        sub_before = requests.get(f"{BASE}/subscription/me", headers=H(tok)).json()
+        used_before = sub_before["cuts_used"]
+        corte = services["Corte"]
+        wid = barbers["Wendel"]["id"]
+        # pick a Monday far enough to be free
+        d = (_next_weekday(0) + timedelta(days=14)).isoformat()
+        slots = requests.get(f"{BASE}/agenda/available/{d}?service_id={corte['id']}&amp;barber_id={wid}", headers=H(tok)).json()["slots"]
+        assert slots
+        time_pick = slots[-1]["time"]
+        r = requests.post(f"{BASE}/appointments",
+                          json={"service_id": corte["id"], "date": d, "time": time_pick, "payment_method": "mensal", "barber_id": wid},
+                          headers=H(tok))
+&gt;       assert r.status_code == 200, r.text
+E       AssertionError: {"detail":"Você já utilizou (ou reservou) todos os cortes do ciclo atual"}
+E       assert 400 == 200
+E        +  where 400 = &lt;Response [400]&gt;.status_code
+
+backend/tests/test_barbers.py:215: AssertionError</failure></testcase><testcase classname="tests.test_barbers.TestAgendaAny" name="test_any_slot_has_both_barbers" time="0.706" /><testcase classname="tests.test_new_features.TestPublicInfo" name="test_public_info_no_auth" time="0.122" /><testcase classname="tests.test_barbers.TestBarberReports" name="test_admin_barber_reports_shape" time="0.120" /><testcase classname="tests.test_security.TestRateLimitLast" name="test_rate_limit_429_after_10_failures" time="1.335" /></testsuite></testsuites>

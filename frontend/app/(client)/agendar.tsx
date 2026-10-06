@@ -8,6 +8,7 @@ import { api, getUser } from "@/src/api";
 import { GoldButton, Card } from "@/src/ui";
 import { openWhatsApp, bookingMsg } from "@/src/whatsapp";
 import { BarberPicker } from "@/src/components/barber-picker";
+import { PixPayment } from "@/src/components/pix-payment";
 
 function fmtDate(d: Date) {
   const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const dd = String(d.getDate()).padStart(2, "0");
@@ -26,6 +27,7 @@ export default function Agendar() {
   const [barbers, setBarbers] = useState<any[]>([]);
   const [selBarber, setSelBarber] = useState<string | null>(null);
   const [payment, setPayment] = useState<string>("pix");
+  const [pixData, setPixData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -66,10 +68,21 @@ export default function Agendar() {
       if (u?.phone) {
         openWhatsApp(u.phone, bookingMsg(u.name, service.name, selDate, selSlot.time, payment, apt.barber_name));
       }
+      if (payment === "pix" && apt.pix) { setPixData({ ...apt.pix, apt }); return; }
       setTimeout(() => router.replace("/(client)/perfil"), 1200);
     } catch (e: any) { setErr(e.message); }
     finally { setLoading(false); }
   };
+
+  if (pixData) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.surface }}>
+        <ScrollView contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: spacing["3xl"], paddingHorizontal: spacing.xl }}>
+          <PixPayment pix={pixData} apt={pixData.apt} onDone={() => router.replace("/(client)/perfil")} />
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.surface }}>
@@ -147,14 +160,17 @@ export default function Agendar() {
             <Text style={styles.sec}>Pagamento</Text>
             <View style={{ gap: spacing.sm }}>
               {[
-                { k: "pix", l: "PIX", i: "zap" },
-                { k: "cartao", l: "Cartão", i: "credit-card" },
-                { k: "dinheiro", l: "Dinheiro (pagar no local)", i: "dollar-sign" },
-                ...(canMensal ? [{ k: "mensal", l: `Cliente Mensal (${sub.cuts_total - sub.cuts_used} disponíveis)`, i: "award" }] : []),
+                { k: "pix", l: "PIX", d: "Pagamento online pelo site — QR Code e Copia e Cola.", i: "zap" },
+                { k: "cartao", l: "Cartão", d: "Pagamento presencial — Cartão. O pagamento será realizado na maquininha no momento do atendimento.", i: "credit-card" },
+                { k: "dinheiro", l: "Dinheiro", d: "Pagamento presencial — Dinheiro. O pagamento será realizado diretamente na barbearia no momento do atendimento.", i: "dollar-sign" },
+                ...(canMensal ? [{ k: "mensal", l: "Cliente Mensal", d: `Usar 1 dos ${sub.cuts_total - sub.cuts_used} cortes disponíveis (descontado só ao concluir).`, i: "award" }] : []),
               ].map((p) => (
                 <Pressable key={p.k} testID={`pay-${p.k}`} onPress={() => setPayment(p.k)} style={[styles.payRow, payment === p.k && styles.payRowSel]}>
                   <Icon name={p.i as any} size={18} color={payment === p.k ? colors.brandPrimary : colors.muted} />
-                  <Text style={[styles.payTxt, payment === p.k && { color: colors.onSurface }]}>{p.l}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.payTxt, payment === p.k && { color: colors.onSurface }]}>{p.l}</Text>
+                    <Text style={styles.payDesc}>{p.d}</Text>
+                  </View>
                 </Pressable>
               ))}
             </View>
@@ -190,4 +206,5 @@ const styles = StyleSheet.create({
   payRow: { flexDirection: "row", alignItems: "center", gap: spacing.md, padding: spacing.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md },
   payRowSel: { borderColor: colors.brandPrimary },
   payTxt: { color: colors.muted, fontSize: 14, fontWeight: "600" },
+  payDesc: { color: colors.muted, fontSize: 11, marginTop: 2, lineHeight: 15 },
 });

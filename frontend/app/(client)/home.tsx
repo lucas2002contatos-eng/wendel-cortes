@@ -8,6 +8,7 @@ import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
 import { api, getUser } from "@/src/api";
 import { Badge, Card, GoldButton, STATUS_LABELS, statusTone } from "@/src/ui";
+import { Logo, useBranding } from "@/src/branding";
 
 function fmtDate(d: Date) {
   const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const dd = String(d.getDate()).padStart(2, "0");
@@ -20,6 +21,7 @@ export default function Home() {
   const [nextApt, setNextApt] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const branding = useBranding();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -63,9 +65,12 @@ export default function Home() {
         contentContainerStyle={{ paddingTop: insets.top + spacing.lg, paddingBottom: spacing["3xl"] }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
       >
-        <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg }}>
-          <Text style={styles.hello}>Olá, {user?.name?.split(" ")[0]}</Text>
-          <Text style={styles.brand}>WENDEL <Text style={{ color: colors.brandPrimary }}>CORTES</Text></Text>
+        <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, flexDirection: "row", alignItems: "center", gap: spacing.md }}>
+          <Logo size={56} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hello}>Olá, {user?.name?.split(" ")[0]}</Text>
+            <Text style={styles.brand}>{branding.name.toUpperCase()}</Text>
+          </View>
         </View>
 
         {/* Cliente Mensal hero */}
@@ -174,7 +179,7 @@ function QuickAction({ icon, label, onPress, testID }: any) {
 
 const styles = StyleSheet.create({
   hello: { color: colors.muted, fontSize: 13, letterSpacing: 1 },
-  brand: { color: colors.onSurface, fontSize: 26, fontWeight: "700", letterSpacing: 3, marginTop: 4 },
+  brand: { color: colors.onSurface, fontSize: 22, fontWeight: "700", letterSpacing: 2, marginTop: 2 },
   section: { color: colors.muted, fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase", marginBottom: spacing.md },
   hero: { height: 200, borderRadius: radius.lg, overflow: "hidden", justifyContent: "flex-end", borderWidth: 1, borderColor: colors.border },
   heroLabel: { color: colors.brandPrimary, fontSize: 11, letterSpacing: 2, fontWeight: "700" },

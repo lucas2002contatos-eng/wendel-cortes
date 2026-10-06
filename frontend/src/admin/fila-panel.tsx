@@ -48,9 +48,9 @@ export function FilaPanel({ compact = false }: { compact?: boolean }) {
   return (
     <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: pad }}>
-        <Text style={compact ? styles.h2 : styles.h1}>Filas de hoje</Text>
+        <Text style={compact ? styles.h2 : styles.h1}>{(data.queues || []).length === 1 ? `Fila do ${data.queues[0].barber_name}` : "Filas de hoje"}</Text>
         <Text style={styles.sub}>Modo: {data.mode.toUpperCase()} · {totalActive} pessoas · {(data.queues || []).length} barbeiros</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingBottom: spacing.md }}>
+        {(data.queues || []).length > 1 && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingBottom: spacing.md }}>
           <Pressable testID="fila-filter-all" onPress={() => setFilter("all")} style={[styles.chip, filter === "all" && styles.chipSel]}>
             <Text style={[styles.chipTxt, filter === "all" && { color: colors.onBrandPrimary }]}>Todas as filas</Text>
           </Pressable>
@@ -59,7 +59,7 @@ export function FilaPanel({ compact = false }: { compact?: boolean }) {
               <Text style={[styles.chipTxt, filter === q.barber_id && { color: colors.onBrandPrimary }]}>{q.barber_name} ({q.waiting})</Text>
             </Pressable>
           ))}
-        </ScrollView>
+        </ScrollView>}
         {notice && (
           <View style={styles.notice}><Icon name="bell" size={14} color={colors.onBrandPrimary} /><Text style={styles.noticeTxt}>{notice}</Text></View>
         )}

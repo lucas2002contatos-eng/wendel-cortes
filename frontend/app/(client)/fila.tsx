@@ -84,7 +84,7 @@ export default function Fila() {
               {data.my_entry.status === "aguardando" ? (
                 <>
                   <Text style={styles.ticketBig}>{data.my_position ?? "-"}º</Text>
-                  <Text style={styles.ticketSub}>Você está em {data.my_position ?? "-"}º lugar</Text>
+                  <Text style={styles.ticketSub}>Você está em {data.my_position ?? "-"}º lugar · {data.ahead ?? 0} à frente · {data.behind ?? 0} atrás</Text>
                 </>
               ) : (
                 <>
@@ -127,7 +127,7 @@ export default function Fila() {
           <View key={q.barber_id}>
             <Text style={[styles.sec, { marginTop: spacing.xl }]}>Fila do {q.barber_name} · {q.waiting} aguardando</Text>
             {q.entries.map((e: any, i: number) => (
-              <View key={e.id} style={[styles.row, e.user_id === data.my_entry?.user_id && { borderColor: colors.brandPrimary }]}>
+              <View key={e.id} style={[styles.row, e.id === data.my_entry?.id && { borderColor: colors.brandPrimary }]}>
                 <Text style={styles.rowPos}>{i + 1}º</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowName}>{e.client_name}</Text>

@@ -11,7 +11,7 @@ import { BarberAvatar } from "@/src/components/barber-picker";
 const WD_SHORT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const WD_CHIP = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 const defaultHours = () => Array.from({ length: 7 }, (_, i) => ({ weekday: i, enabled: i < 6, start: "09:00", end: "18:00" }));
-const emptyForm = () => ({ name: "", phone: "", photo_url: "", description: "", active: true, work_hours: defaultHours(), commission_pct: "" });
+const emptyForm = () => ({ name: "", phone: "", photo_url: "", description: "", active: true, work_hours: defaultHours(), commission_pct: "", pix_key: "", pix_key_type: "aleatoria", pix_holder_name: "", service_ids: [] });
 function fmt(d: Date) {
   const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
@@ -44,6 +44,22 @@ export default function Barbeiros() {
   const [tab, setTab] = useState<Tab>("team");
   const [barbers, setBarbers] = useState<any[] | null>(null);
   const [editing, setEditing] = useState<any | null>(null); // form state (new or existing)
+  const [account, setAccount] = useState<any | null>(null);
+  const [acc, setAcc] = useState({ email: "", password: "" });
+  const [accMsg, setAccMsg] = useState<string | null>(null);
+  const openEdit = async (b: any) => {
+    setErr(null); setAccMsg(null); setAcc({ email: "", password: "" }); setAccount(null);
+    setEditing({ ...b, commission_pct: b.commission_pct ?? "", work_hours: b.work_hours?.length ? b.work_hours : defaultHours() });
+    try { const a = await api(`/admin/barbers/${b.id}/account`); setAccount(a); if (a) setAcc({ email: a.email, password: "" }); } catch {}
+  };
+  const saveAccount = async () => {
+    setErr(null); setAccMsg(null);
+    try { const a = await api(`/admin/barbers/${editing.id}/account`, { method: "POST", body: JSON.stringify(acc) }); setAccount(a); setAcc({ ...acc, password: "" }); setAccMsg(`Acesso ${account ? "redefinido" : "criado"}: ${a.email}`); }
+    catch (e: any) { setErr(e.message); }
+  };
+  const removeAccount = async () => {
+    try { await api(`/admin/barbers/${editing.id}/account`, { method: "DELETE" }); setAccount(null); setAcc({ email: "", password: "" }); setAccMsg("Acesso removido"); } catch (e: any) { setErr(e.message); }
+  };
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -82,7 +98,7 @@ export default function Barbeiros() {
   const save = async () => {
     if (!editing.name.trim()) { setErr("Informe o nome do barbeiro"); return; }
     setSaving(true); setErr(null);
-    const body = { ...editing, commission_pct: editing.commission_pct === "" ? null : Number(editing.commission_pct) };
+    const body = { ...editing, commission_pct: editing.commission_pct === "" ? null : Number(editing.commission_pct), pix_key_type: editing.pix_key_type || "aleatoria", service_ids: editing.service_ids || [] };
     try {
       if (editing.id) await api(`/barbers/${editing.id}`, { method: "PUT", body: JSON.stringify(body) });
       else await api("/barbers", { method: "POST", body: JSON.stringify(body) });
@@ -145,6 +161,33 @@ export default function Barbeiros() {
           <Text style={styles.lbl}>Comissão (%) — opcional, preparado para uso futuro</Text>
           <TextInput testID="barber-commission-input" style={styles.input} value={String(editing.commission_pct ?? "")} onChangeText={(v) => setEditing({ ...editing, commission_pct: v.replace(",", ".") })} keyboardType="decimal-pad" placeholder="Ex.: 40" placeholderTextColor={colors.muted} />
 
+          <Text style={styles.sec}>PIX do barbeiro (usado quando o modo PIX for "individual por barbeiro")</Text>
+          <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap" }}>
+            {["cpf", "cnpj", "telefone", "email", "aleatoria"].map((t) => (
+              <Pressable key={t} testID={`barber-pix-type-${t}`} onPress={() => setEditing({ ...editing, pix_key_type: t })} style={[styles.chip, (editing.pix_key_type || "aleatoria") === t && styles.chipSel]}><Text style={[styles.chipTxt, (editing.pix_key_type || "aleatoria") === t && { color: colors.onBrandPrimary }]}>{t}</Text></Pressable>
+            ))}
+          </View>
+          <Text style={styles.lbl}>Chave PIX</Text>
+          <TextInput testID="barber-pix-key-input" style={styles.input} autoCapitalize="none" value={editing.pix_key || ""} onChangeText={(v) => setEditing({ ...editing, pix_key: v })} placeholder="Deixe vazio para usar a chave da barbearia" placeholderTextColor={colors.muted} />
+          <Text style={styles.lbl}>Nome do favorecido (até 25 letras)</Text>
+          <TextInput testID="barber-pix-holder-input" style={styles.input} maxLength={25} value={editing.pix_holder_name || ""} onChangeText={(v) => setEditing({ ...editing, pix_holder_name: v })} placeholder={editing.name || "Nome"} placeholderTextColor={colors.muted} />
+
+          {editing.id && (
+            <>
+              <Text style={styles.sec}>Conta de acesso ao site</Text>
+              <Text style={styles.hint}>{account ? `Acesso ativo: ${account.email}. Informe uma nova senha para redefinir.` : "O barbeiro ainda não tem login. Crie um e-mail e senha para ele acessar a própria agenda e fila."}</Text>
+              <Text style={styles.lbl}>E-mail de acesso</Text>
+              <TextInput testID="barber-account-email" style={styles.input} autoCapitalize="none" keyboardType="email-address" value={acc.email} onChangeText={(v) => setAcc({ ...acc, email: v })} placeholder="barbeiro@email.com" placeholderTextColor={colors.muted} />
+              <Text style={styles.lbl}>Senha {account ? "(nova)" : ""}</Text>
+              <TextInput testID="barber-account-password" style={styles.input} secureTextEntry value={acc.password} onChangeText={(v) => setAcc({ ...acc, password: v })} placeholder="mínimo 6 caracteres" placeholderTextColor={colors.muted} />
+              <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md, flexWrap: "wrap" }}>
+                <Pressable testID="barber-account-save" onPress={saveAccount} style={styles.btn}><Icon name="key" size={14} color={colors.onBrandPrimary} /><Text style={styles.btnTxt}>{account ? "Redefinir acesso" : "Criar acesso"}</Text></Pressable>
+                {account && <Pressable testID="barber-account-remove" onPress={removeAccount} style={[styles.btnGhost, { borderColor: colors.error }]}><Text style={[styles.btnGhostTxt, { color: colors.onError }]}>Remover acesso</Text></Pressable>}
+              </View>
+              {accMsg && <Text style={styles.okTxt}>{accMsg}</Text>}
+            </>
+          )}
+
           <View style={[styles.rowBetween, { marginTop: spacing.lg }]}>
             <Text style={styles.lblInline}>Barbeiro ativo</Text>
             <Switch testID="barber-active-switch" value={editing.active} onValueChange={(v) => setEditing({ ...editing, active: v })} trackColor={{ true: colors.brandPrimary, false: colors.surfaceTertiary }} thumbColor={colors.onSurface} />
@@ -200,10 +243,10 @@ export default function Barbeiros() {
                       <Text style={styles.meta}>{hoursSummary(b.work_hours)}</Text>
                       {!!b.phone && <Text style={styles.meta}>{b.phone}</Text>}
                     </View>
-                    <Badge label={b.active ? "Ativo" : "Inativo"} tone={b.active ? "success" : "default"} />
+                    <Badge label={b.archived ? "Arquivado" : b.active ? "Ativo" : "Inativo"} tone={b.active ? "success" : "default"} />
                   </View>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.md }}>
-                    <Pressable testID={`edit-barber-${b.name}`} onPress={() => { setErr(null); setEditing({ ...b, commission_pct: b.commission_pct ?? "", work_hours: b.work_hours?.length ? b.work_hours : defaultHours() }); }} style={styles.btn}><Icon name="edit-2" size={14} color={colors.onBrandPrimary} /><Text style={styles.btnTxt}>Editar</Text></Pressable>
+                    <Pressable testID={`edit-barber-${b.name}`} onPress={() => openEdit(b)} style={styles.btn}><Icon name="edit-2" size={14} color={colors.onBrandPrimary} /><Text style={styles.btnTxt}>Editar</Text></Pressable>
                     <Pressable testID={`toggle-barber-${b.name}`} onPress={() => toggleActive(b)} style={styles.btnGhost}><Text style={styles.btnGhostTxt}>{b.active ? "Desativar" : "Ativar"}</Text></Pressable>
                     <Pressable testID={`blocks-barber-${b.name}`} onPress={() => { setBlockBarber(b.id); setTab("blocks"); }} style={styles.btnGhost}><Text style={styles.btnGhostTxt}>Bloqueios</Text></Pressable>
                     <Pressable testID={`delete-barber-${b.name}`} onPress={() => remove(b)} style={[styles.btnGhost, { borderColor: colors.error }]}><Text style={[styles.btnGhostTxt, { color: colors.onError }]}>Excluir</Text></Pressable>

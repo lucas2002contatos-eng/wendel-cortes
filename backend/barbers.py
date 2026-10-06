@@ -9,7 +9,10 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+DATE_RE = r"^\d{4}-\d{2}-\d{2}$"
+TIME_RE = r"^([01]\d|2[0-3]):[0-5]\d$"
 
 SLOT_STEP_MIN = 30
 ACTIVE_APT_STATUSES_EXCLUDED = ["cancelado", "nao_compareceu"]
@@ -17,10 +20,10 @@ ACTIVE_APT_STATUSES_EXCLUDED = ["cancelado", "nao_compareceu"]
 
 # ----------------------------------------------------------------- models ---
 class WorkHour(BaseModel):
-    weekday: int  # 0=Mon..6=Sun
+    weekday: int = Field(ge=0, le=6)  # 0=Mon..6=Sun
     enabled: bool = True
-    start: str = "09:00"
-    end: str = "18:00"
+    start: str = Field("09:00", pattern=TIME_RE)
+    end: str = Field("18:00", pattern=TIME_RE)
 
 
 def default_work_hours() -> List[dict]:
@@ -35,6 +38,11 @@ class BarberBody(BaseModel):
     active: bool = True
     work_hours: Optional[List[WorkHour]] = None
     commission_pct: Optional[float] = None  # prepared for future commission feature
+    service_ids: List[str] = []  # services this barber performs (empty = all)
+    pix_key: Optional[str] = ""
+    pix_key_type: Optional[str] = Field("aleatoria", pattern="^(cpf|cnpj|telefone|email|aleatoria)$")
+    pix_holder_name: Optional[str] = Field("", max_length=25)
+    archived: bool = False
 
 
 class BarberActiveBody(BaseModel):
@@ -42,16 +50,23 @@ class BarberActiveBody(BaseModel):
 
 
 class BarberBlockBody(BaseModel):
-    date: str
-    time: str
-    reason: Optional[str] = ""
+    date: str = Field(pattern=DATE_RE)
+    time: str = Field(pattern=TIME_RE)
+    reason: Optional[str] = Field("", max_length=200)
 
 
 class DayOverrideBody(BaseModel):
-    date: str
+    date: str = Field(pattern=DATE_RE)
     working: bool
-    start: Optional[str] = None
-    end: Optional[str] = None
+    start: Optional[str] = Field(None, pattern=TIME_RE)
+    end: Optional[str] = Field(None, pattern=TIME_RE)
+
+
+def parse_date(d: str) -> datetime:
+    try:
+        return datetime.strptime(d, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Data inválida (use AAAA-MM-DD)")
 
 
 # ---------------------------------------------------------------- helpers ---
@@ -69,7 +84,7 @@ async def working_window(db, barber: dict, d: str) -> Optional[dict]:
     """Return {"start","end"} if barber works on date d (respecting day overrides), else None."""
     if not barber.get("active", True):
         return None
-    wd = datetime.strptime(d, "%Y-%m-%d").weekday()
+    wd = parse_date(d).weekday()
     wh = next((h for h in barber.get("work_hours", []) if h["weekday"] == wd), None)
     ov = await db.barber_day_overrides.find_one({"barber_id": barber["id"], "date": d}, {"_id": 0})
     if ov is not None:
@@ -87,7 +102,7 @@ async def working_window(db, barber: dict, d: str) -> Optional[dict]:
 async def available_barbers(db, d: str) -> List[dict]:
     """Active barbers working on date d, each with its window."""
     out = []
-    async for b in db.barbers.find({"active": True}, {"_id": 0}).sort("name", 1):
+    async for b in db.barbers.find({"active": True, "archived": {"$ne": True}}, {"_id": 0}).sort("name", 1):
         w = await working_window(db, b, d)
         if w:
             out.append({**b, "window": w})
@@ -132,63 +147,77 @@ async def is_barber_slot_free(db, barber: dict, d: str, time: str, duration_min:
 
 
 # ----------------------------------------------------------------- router ---
-def make_barbers_router(db, get_current_user, require_admin, now_utc) -> APIRouter:
+def make_barbers_router(db, get_current_user, require_admin, now_utc, audit) -> APIRouter:
     r = APIRouter()
 
     @r.get("/barbers")
     async def list_barbers(user: dict = Depends(get_current_user)):
-        q = {} if user["role"] == "admin" else {"active": True}
-        return await db.barbers.find(q, {"_id": 0}).sort("name", 1).to_list(200)
+        q = {} if user["role"] == "admin" else {"active": True, "archived": {"$ne": True}}
+        proj = {"_id": 0} if user["role"] == "admin" else {"_id": 0, "pix_key": 0, "pix_key_type": 0, "pix_holder_name": 0, "phone": 0, "commission_pct": 0}
+        return await db.barbers.find(q, proj).sort("name", 1).to_list(200)
 
     @r.get("/barbers/available/{d}")
     async def barbers_available(d: str, _: dict = Depends(get_current_user)):
-        try:
-            datetime.strptime(d, "%Y-%m-%d")
-        except Exception:
-            raise HTTPException(400, "Data inválida")
+        parse_date(d)
         return await available_barbers(db, d)
 
     @r.post("/barbers")
-    async def create_barber(body: BarberBody, _: dict = Depends(require_admin)):
+    async def create_barber(body: BarberBody, user: dict = Depends(require_admin)):
         doc = body.model_dump()
         doc["work_hours"] = [h.model_dump() for h in body.work_hours] if body.work_hours else default_work_hours()
         doc["id"] = str(uuid.uuid4())
         doc["created_at"] = now_utc().isoformat()
         await db.barbers.insert_one(doc.copy())
         doc.pop("_id", None)
+        await audit(user, "barber.create", "barber", doc["id"], None, {k: v for k, v in doc.items() if k != "pix_key"} | {"pix_key": "***" if doc.get("pix_key") else ""})
         return doc
 
     @r.put("/barbers/{bid}")
-    async def update_barber(bid: str, body: BarberBody, _: dict = Depends(require_admin)):
+    async def update_barber(bid: str, body: BarberBody, user: dict = Depends(require_admin)):
         doc = body.model_dump()
         if body.work_hours is None:
             doc.pop("work_hours")
         else:
             doc["work_hours"] = [h.model_dump() for h in body.work_hours]
-        res = await db.barbers.update_one({"id": bid}, {"$set": doc})
-        if res.matched_count == 0:
+        before = await db.barbers.find_one({"id": bid}, {"_id": 0})
+        if not before:
             raise HTTPException(404, "Barbeiro não encontrado")
+        await db.barbers.update_one({"id": bid}, {"$set": doc})
         b = await db.barbers.find_one({"id": bid}, {"_id": 0})
+        changed = {k: b.get(k) for k in doc if before.get(k) != b.get(k)}
+        if changed:
+            await audit(user, "barber.update", "barber", bid, {k: before.get(k) for k in changed}, changed)
         # keep denormalized name in sync
         await db.appointments.update_many({"barber_id": bid}, {"$set": {"barber_name": b["name"]}})
         await db.queue.update_many({"barber_id": bid}, {"$set": {"barber_name": b["name"]}})
         return b
 
     @r.patch("/barbers/{bid}/active")
-    async def set_barber_active(bid: str, body: BarberActiveBody, _: dict = Depends(require_admin)):
+    async def set_barber_active(bid: str, body: BarberActiveBody, user: dict = Depends(require_admin)):
         res = await db.barbers.update_one({"id": bid}, {"$set": {"active": body.active}})
         if res.matched_count == 0:
             raise HTTPException(404, "Barbeiro não encontrado")
+        await audit(user, "barber.active", "barber", bid, {"active": not body.active}, {"active": body.active})
         return await db.barbers.find_one({"id": bid}, {"_id": 0})
 
     @r.delete("/barbers/{bid}")
-    async def delete_barber(bid: str, _: dict = Depends(require_admin)):
-        res = await db.barbers.delete_one({"id": bid})
-        if res.deleted_count == 0:
+    async def delete_barber(bid: str, user: dict = Depends(require_admin)):
+        """Delete when safe; barbers with service history are archived (history preserved)."""
+        b = await db.barbers.find_one({"id": bid}, {"_id": 0})
+        if not b:
             raise HTTPException(404, "Barbeiro não encontrado")
+        used = await db.appointments.count_documents({"barber_id": bid}) + await db.queue.count_documents({"barber_id": bid})
+        if used:
+            await db.barbers.update_one({"id": bid}, {"$set": {"archived": True, "active": False}})
+            await db.users.delete_many({"role": "barber", "barber_id": bid})
+            await audit(user, "barber.archive", "barber", bid, {"archived": False}, {"archived": True, "active": False})
+            return {"ok": True, "archived": True, "message": f"{b['name']} possui {used} atendimento(s) no histórico e foi arquivado em vez de excluído."}
+        await db.barbers.delete_one({"id": bid})
         await db.barber_blocks.delete_many({"barber_id": bid})
         await db.barber_day_overrides.delete_many({"barber_id": bid})
-        return {"ok": True}
+        await db.users.delete_many({"role": "barber", "barber_id": bid})
+        await audit(user, "barber.delete", "barber", bid, {"name": b["name"]}, None)
+        return {"ok": True, "archived": False}
 
     # ---- blocks
     @r.post("/barbers/{bid}/blocks")
@@ -229,6 +258,7 @@ def make_barbers_router(db, get_current_user, require_admin, now_utc) -> APIRout
     @r.get("/barbers/schedule/{d}")
     async def day_schedule(d: str, _: dict = Depends(require_admin)):
         """All barbers with working status for date d (admin daily staffing view)."""
+        parse_date(d)
         out = []
         async for b in db.barbers.find({}, {"_id": 0}).sort("name", 1):
             ov = await db.barber_day_overrides.find_one({"barber_id": b["id"], "date": d}, {"_id": 0})

@@ -30,6 +30,7 @@ Aplicativo mobile de gestão para barbearia com dois perfis (cliente e admin/bar
     - Admin: aba Barbeiros (Equipe / Escala do dia / Bloqueios), Agenda dos Barbeiros com filtro por barbeiro e visão Dia/Semana/Mês, Filas por barbeiro, Relatórios por barbeiro (Mais → Relatórios; `GET /admin/reports/barbers`).
     - Logo oficial em `frontend/assets/images/logo.jpeg` (landing, login, web frame).
     - Seed: barbeiros Wendel (Seg–Sáb 09–18) e João (Ter–Sáb 10–20); registros antigos migrados para Wendel.
+15. **Hardening de segurança (auditoria)**: JWT_SECRET forte obrigatório (≥32 chars, sem fallback), tokens de 7 dias; login sem pré-preenchimento; rate limit em `/auth/login` (10 falhas/15 min por IP e e-mail → 429); senha mínima 6; mensagem neutra no cadastro; `/api/seed` só admin; dados demo (clientes de teste) só com `SEED_DEMO_DATA=true` (dev); admin criado com `ADMIN_PASSWORD` (padrão admin123 apenas em dev — **definir em produção**); `/queue/today` anonimiza outros clientes para não-admin (sem telefone/user_id, nome abreviado); `/register-push` autenticado; CORS via `CORS_ORIGINS`; validação de data/hora → 400.
 
 ## Credenciais
 - Admin: `admin@wendelcortes.com` / `admin123`
@@ -44,3 +45,9 @@ Aplicativo mobile de gestão para barbearia com dois perfis (cliente e admin/bar
 - Pagamentos PIX/cartão: estrutura pronta (status pagamento_pendente) — Stripe/PIX real precisa das chaves do usuário no futuro.
 - WhatsApp: usa wa.me (abre o app com mensagem pronta) — migração para Twilio/Meta Cloud API futura.
 - Push notifications precisam de build (não funcionam no Expo Go) — funcionam após deploy + build.
+16. **Centro de controle do Administrador Fundador (iteração 5)** — SITE/WEB APP responsivo (sem app nativo):
+    - Papéis: `admin` (Fundador, acesso total), `barber` (conta vinculada a `barber_id`; vê só própria agenda/fila/pagamentos; `require_staff` + `barber_scope` no backend), `client`.
+    - `backend/admin_config.py`: branding (logo/favicon upload base64 → coleção `branding_assets`, servido em `GET /api/public/branding/{kind}`, histórico/restauração), plano Cliente Mensal (`settings.plan` {name, price, cuts, cycle_days, rules, allowed_service_ids, active}; assinaturas guardam `plan_snapshot`), ajuste manual de assinatura (`admin_history`), PIX (`settings.pix` modo shop|barber; barbeiro tem `pix_key`), pagamentos (`payment_status`: aguardando_pagamento|pendente_confirmacao|pago|expirado|cancelado; `PUT /appointments/{id}/payment`), config geral (`settings.general`), auditoria (`audit_logs`: quem/quando/ação/antes/depois), contas de barbeiro (`/admin/barbers/{id}/account`), recuperação de senha (`/auth/forgot` gera código 6 dígitos 30 min visível ao admin em Config → Recuperação de senha, enviado via WhatsApp; `/auth/reset`).
+    - `backend/pix.py`: BR Code EMV estático com CRC16 (QR válido) — `GET /appointments/{id}/pix`.
+    - Serviços: `archived`, `image_url`; excluir com histórico → arquiva. Barbeiros idem.
+    - Frontend: `src/branding.tsx` (logo dinâmico em landing/login/home/painéis/web frame + favicon), `app/(auth)/forgot.tsx`, `src/components/pix-payment.tsx` (QR + copia e cola), Config hub em `app/(admin)/mais.tsx` com `src/admin/config-sections.tsx` e `services-section.tsx`, `app/(admin)/perfil.tsx` (barbeiro), tabs por papel em `(admin)/_layout.tsx`, cliente edita nome/telefone (`PUT /auth/me`).

@@ -60,7 +60,7 @@ def carlos_token():
 
 
 @pytest.fixture(scope="module")
-def joao_token():
+def jackson_token():
     return _login("joao@test.com", "cliente123")
 
 
@@ -100,14 +100,14 @@ class TestBarbersList:
         assert r.status_code == 200
         names = [b["name"] for b in r.json()]
         assert "Wendel" in names
-        assert "João" in names
+        assert "Jackson" in names
 
     def test_available_tuesday_has_both(self, carlos_token):
         d = _next_weekday(1).isoformat()  # Tuesday
         r = requests.get(f"{BASE}/barbers/available/{d}", headers=H(carlos_token))
         assert r.status_code == 200
         names = [b["name"] for b in r.json()]
-        assert "Wendel" in names and "João" in names
+        assert "Wendel" in names and "Jackson" in names
 
     def test_available_monday_only_wendel(self, carlos_token):
         d = _next_weekday(0).isoformat()  # Monday
@@ -115,7 +115,7 @@ class TestBarbersList:
         assert r.status_code == 200
         names = [b["name"] for b in r.json()]
         assert "Wendel" in names
-        assert "João" not in names
+        assert "Jackson" not in names
 
 
 # =========================================================== 2. agenda any =
@@ -127,11 +127,11 @@ class TestAgendaAny:
         assert r.status_code == 200
         data = r.json()
         assert data["mode"] == "agenda"
-        # find 10:00 slot (both start by 10:00: Wendel 09, João 10)
+        # find 10:00 slot (both start by 10:00: Wendel 09, Jackson 10)
         slot10 = next((s for s in data["slots"] if s["time"] == "10:00"), None)
         assert slot10 is not None, f"no 10:00 slot: {data['slots'][:3]}"
         option_names = [b["name"] for b in slot10["barbers"]]
-        assert "Wendel" in option_names and "João" in option_names
+        assert "Wendel" in option_names and "Jackson" in option_names
 
 
 # =============================================== 3-5. conflict scope by barber =
@@ -142,7 +142,7 @@ def booking_tuesday_date():
 
 
 class TestPerBarberConflict:
-    def test_different_barbers_same_time_both_ok(self, carlos_token, joao_token, services, barbers, booking_tuesday_date):
+    def test_different_barbers_same_time_both_ok(self, carlos_token, jackson_token, services, barbers, booking_tuesday_date):
         corte = services["Corte"]
         d = booking_tuesday_date
         time = "14:00"
@@ -152,10 +152,10 @@ class TestPerBarberConflict:
         assert r1.status_code == 200, r1.text
         assert r1.json()["barber_name"] == "Wendel"
         r2 = requests.post(f"{BASE}/appointments",
-                           json={"service_id": corte["id"], "date": d, "time": time, "payment_method": "pix", "barber_id": barbers["João"]["id"]},
-                           headers=H(joao_token))
+                           json={"service_id": corte["id"], "date": d, "time": time, "payment_method": "pix", "barber_id": barbers["Jackson"]["id"]},
+                           headers=H(jackson_token))
         assert r2.status_code == 200, r2.text
-        assert r2.json()["barber_name"] == "João"
+        assert r2.json()["barber_name"] == "Jackson"
 
     def test_same_barber_same_time_conflict(self, rafael_token, services, barbers, booking_tuesday_date):
         corte = services["Corte"]
@@ -192,7 +192,7 @@ class TestAnyAutoPick:
         assert r.status_code == 200, r.text
         body = r.json()
         assert body.get("barber_id")
-        assert body.get("barber_name") in ("Wendel", "João")
+        assert body.get("barber_name") in ("Wendel", "Jackson")
 
 
 # =========================================================== 7. mensal flow =
@@ -248,8 +248,8 @@ def unique_client_token():
 
 
 class TestQueuePerBarber:
-    def test_join_wendel_and_joao_independent_queues(self, lucas_token, unique_client_token, services, barbers):
-        """lucas joins Wendel queue, fresh client joins João queue → independent positions."""
+    def test_join_wendel_and_jackson_independent_queues(self, lucas_token, unique_client_token, services, barbers):
+        """lucas joins Wendel queue, fresh client joins Jackson queue → independent positions."""
         corte = services["Corte"]
         today_info = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
         if today_info["mode"] != "fila":
@@ -267,24 +267,24 @@ class TestQueuePerBarber:
         assert entry1.get("position") is not None
 
         r2 = requests.post(f"{BASE}/queue/join",
-                           json={"service_id": corte["id"], "barber_id": barbers["João"]["id"]},
+                           json={"service_id": corte["id"], "barber_id": barbers["Jackson"]["id"]},
                            headers=H(unique_client_token))
         assert r2.status_code == 200, r2.text
         entry2 = r2.json()
-        assert entry2["barber_name"] == "João"
+        assert entry2["barber_name"] == "Jackson"
         assert entry2.get("position") is not None and entry2["position"] >= 1
-        # queue positions must be independent between barbers — verify by checking the João entry is in João's group only
+        # queue positions must be independent between barbers — verify by checking the Jackson entry is in Jackson's group only
         today2 = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
-        joao_q = next((q for q in today2["queues"] if q["barber_name"] == "João"), None)
+        jackson_q = next((q for q in today2["queues"] if q["barber_name"] == "Jackson"), None)
         wendel_q = next((q for q in today2["queues"] if q["barber_name"] == "Wendel"), None)
-        assert joao_q and any(e["id"] == entry2["id"] for e in joao_q["entries"])
+        assert jackson_q and any(e["id"] == entry2["id"] for e in jackson_q["entries"])
         assert wendel_q and not any(e["id"] == entry2["id"] for e in wendel_q["entries"])
 
         # queue/today returns per-barber groups
         today2 = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
         assert "queues" in today2
         qbarbers = {q["barber_name"] for q in today2["queues"]}
-        assert {"Wendel", "João"}.issubset(qbarbers)
+        assert {"Wendel", "Jackson"}.issubset(qbarbers)
 
     def test_admin_call_start_complete_calls_next_same_barber(self, admin_token, lucas_token, services, barbers):
         today_info = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
@@ -317,11 +317,11 @@ class TestQueuePerBarber:
         assert body.get("next_called"), "no next_called returned"
         assert body["next_called"]["id"] == expected_next_id
 
-        # verify João queue not affected
+        # verify Jackson queue not affected
         today2 = requests.get(f"{BASE}/queue/today", headers=H(lucas_token)).json()
-        joao_q = next((q for q in today2["queues"] if q["barber_name"] == "João"), None)
-        if joao_q and joao_q["entries"]:
-            assert all(e["status"] in ("aguardando",) for e in joao_q["entries"] if e["status"] != "chamado" or e.get("auto_called") is not True), "João queue was auto-affected"
+        jackson_q = next((q for q in today2["queues"] if q["barber_name"] == "Jackson"), None)
+        if jackson_q and jackson_q["entries"]:
+            assert all(e["status"] in ("aguardando",) for e in jackson_q["entries"] if e["status"] != "chamado" or e.get("auto_called") is not True), "Jackson queue was auto-affected"
 
 
 # =============================================== 10-13. admin barber CRUD ===
@@ -357,8 +357,8 @@ class TestAdminBarbersCrud:
         avail = requests.get(f"{BASE}/barbers/available/{sat}", headers=H(carlos_token)).json()
         assert not any(b["name"] == "TEST_Pedro" for b in avail)
 
-    def test_update_workhours_joao_monday(self, admin_token, carlos_token, barbers):
-        joao = barbers["João"]
+    def test_update_workhours_jackson_monday(self, admin_token, carlos_token, barbers):
+        joao = barbers["Jackson"]
         # enable Monday
         new_wh = [{"weekday": i, "enabled": (0 <= i <= 5), "start": "10:00", "end": "20:00"} for i in range(7)]
         r = requests.put(f"{BASE}/barbers/{joao['id']}",
@@ -367,7 +367,7 @@ class TestAdminBarbersCrud:
         assert r.status_code == 200, r.text
         mon = _next_weekday(0).isoformat()
         avail = requests.get(f"{BASE}/barbers/available/{mon}", headers=H(carlos_token)).json()
-        assert any(b["name"] == "João" for b in avail)
+        assert any(b["name"] == "Jackson" for b in avail)
         # restore (Tue-Sat only)
         restore_wh = [{"weekday": i, "enabled": (1 <= i <= 5), "start": "10:00", "end": "20:00"} for i in range(7)]
         r2 = requests.put(f"{BASE}/barbers/{joao['id']}",
@@ -395,7 +395,7 @@ class TestAdminBarbersCrud:
         assert "11:00" in [s["time"] for s in slots2]
 
     def test_day_override_adds_and_removes(self, admin_token, carlos_token, barbers):
-        joao = barbers["João"]
+        joao = barbers["Jackson"]
         # add positive override for next Monday
         mon = _next_weekday(0).isoformat()
         r = requests.put(f"{BASE}/barbers/{joao['id']}/day-override",
@@ -403,7 +403,7 @@ class TestAdminBarbersCrud:
                          headers=H(admin_token))
         assert r.status_code == 200
         avail = requests.get(f"{BASE}/barbers/available/{mon}", headers=H(carlos_token)).json()
-        assert any(b["name"] == "João" for b in avail)
+        assert any(b["name"] == "Jackson" for b in avail)
         # negative override on next Tuesday
         tue = (_next_weekday(1) + timedelta(days=7)).isoformat()
         r2 = requests.put(f"{BASE}/barbers/{joao['id']}/day-override",
@@ -411,7 +411,7 @@ class TestAdminBarbersCrud:
                           headers=H(admin_token))
         assert r2.status_code == 200
         avail2 = requests.get(f"{BASE}/barbers/available/{tue}", headers=H(carlos_token)).json()
-        assert not any(b["name"] == "João" for b in avail2)
+        assert not any(b["name"] == "Jackson" for b in avail2)
         # cleanup overrides
         requests.delete(f"{BASE}/barbers/{joao['id']}/day-override/{mon}", headers=H(admin_token))
         requests.delete(f"{BASE}/barbers/{joao['id']}/day-override/{tue}", headers=H(admin_token))
@@ -431,10 +431,10 @@ class TestBarberReports:
         assert r.status_code == 200, r.text
         data = r.json()
         assert "barbers" in data
-        # expect at least Wendel + João listed (even if zero activity)
+        # expect at least Wendel + Jackson listed (even if zero activity)
         names = [b["barber_name"] for b in data["barbers"]]
         assert "Wendel" in names
-        assert "João" in names
+        assert "Jackson" in names
         for b in data["barbers"]:
             for k in ["atendimentos", "clientes", "faturamento", "servicos"]:
                 assert k in b, f"missing {k} in report"
