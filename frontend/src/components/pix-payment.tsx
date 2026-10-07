@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "@/src/api";
 import { View, Text, Pressable, StyleSheet, Platform } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import * as Clipboard from "expo-clipboard";
@@ -13,6 +14,14 @@ const STATUS_LABEL: Record<string, string> = {
 /** Valid PIX BR Code (EMV) rendered as QR + "Copia e Cola". */
 export function PixPayment({ pix, apt, onDone }: { pix: any; apt: any; onDone?: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [status, setStatus] = useState<string>(pix?.payment_status || "aguardando_pagamento");
+  useEffect(() => {
+    if (!apt?.id || status === "pago") return;
+    const t = setInterval(async () => {
+      try { const r = await api(`/appointments/${apt.id}/payment-status`); if (r.payment_status) setStatus(r.payment_status); } catch {}
+    }, 5000);
+    return () => clearInterval(t);
+  }, [apt?.id, status]);
   const copy = async () => {
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) await navigator.clipboard.writeText(pix.payload);
@@ -28,6 +37,17 @@ export function PixPayment({ pix, apt, onDone }: { pix: any; apt: any; onDone?: 
         <Text style={styles.title}>PIX indisponível</Text>
         <Text style={styles.sub}>{pix?.reason || "A barbearia ainda não configurou a chave PIX."} Você pode pagar presencialmente no dia.</Text>
         {onDone && <GoldButton label="Ver meus agendamentos" onPress={onDone} style={{ marginTop: spacing.lg, alignSelf: "stretch" }} />}
+      </View>
+    );
+  }
+
+  if (status === "pago") {
+    return (
+      <View style={styles.card} testID="pix-paid">
+        <Icon name="check-circle" size={48} color={colors.brandPrimary} />
+        <Text style={styles.title}>Pagamento confirmado!</Text>
+        <Text style={styles.sub}>R$ {Number(pix.amount).toFixed(2)} · {apt?.service_name}{apt?.barber_name ? ` com ${apt.barber_name}` : ""}. Seu horário está garantido.</Text>
+        {onDone && <GoldButton testID="pix-done-btn" label="Ver meus agendamentos" onPress={onDone} style={{ marginTop: spacing.lg, alignSelf: "stretch" }} />}
       </View>
     );
   }
@@ -51,9 +71,9 @@ export function PixPayment({ pix, apt, onDone }: { pix: any; apt: any; onDone?: 
       <View style={styles.meta}>
         <Text style={styles.metaTxt}>Favorecido: <Text style={{ color: colors.onSurface }}>{pix.holder_name}</Text></Text>
         <Text style={styles.metaTxt}>Chave ({pix.key_type}): <Text style={{ color: colors.onSurface }}>{pix.key}</Text></Text>
-        <Text style={styles.metaTxt}>Status: <Text style={{ color: colors.brandPrimary }}>{STATUS_LABEL[pix.payment_status || "aguardando_pagamento"]}</Text> · válido por {pix.expires_min} min</Text>
+        <Text style={styles.metaTxt}>Status: <Text style={{ color: colors.brandPrimary }}>{STATUS_LABEL[status]}</Text> · válido por {pix.expires_min} min</Text>
       </View>
-      <Text style={styles.hint}>Após pagar, a barbearia confirma o recebimento e seu horário fica garantido.</Text>
+      <Text style={styles.hint}>Esta tela atualiza sozinha quando o pagamento for confirmado. Se a confirmação automática não estiver ativa, a barbearia confirma manualmente.</Text>
       {onDone && <GhostButton testID="pix-done-btn" label="Já paguei / Ver meus agendamentos" onPress={onDone} style={{ marginTop: spacing.lg, alignSelf: "stretch" }} />}
     </View>
   );

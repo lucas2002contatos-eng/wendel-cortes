@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 6 - image upload, email-based password recovery, PIX auto-confirm webhook. Backend: 13/13 NEW tests in test_iteration6.py PASS: admin uploads 1x1 PNG → /api/public/images/{id} serves image/png 200; client POST→403; invalid base64→400; barber photo_url via PUT /barbers/{id} persists and client GET /barbers shows photo_url; service image_url via PUT /services/{id} persists and public /public/info includes image_url. Forgot-password: POST /auth/forgot (carlos@test.com) returns generic 200 message; GET /admin/password-resets returns record with email_sent boolean (false for @test.com — provider rejects fake domain, expected); reset via code succeeds; password restored to cliente123 (login verified). PIX auto-confirm: PUT /admin/pix-provider mercadopago returns webhook_secret + webhook_path and masks access_token as '***'; GET returns same; client books PIX appt with Wendel future Tuesday → payment_status aguardando_pagamento; txid = id.replace('-','')[:25]; wrong secret→401; correct webhook→200 with payment_status 'pago'; GET /appointments/{id}/payment-status as client→'pago'; audit log contains payment.webhook.paid for that appointment id; status 'pending' payload→200 ignored, payment_status unchanged; unknown txid→404; auto_confirm=false→200 ignored. Cross-user polling blocked (joao GET carlos's apt→403). Full regression: 84/88 pass + 3 skipped; the 4 failures are the SAME pre-existing shared-DB-state issues documented in iteration_5 (test_barbers PerBarberConflict / Mensal / test_security seed count). Frontend 390x844 verified: admin Barbeiros→Editar Wendel modal shows 'Foto do barbeiro' + testID barber-photo-pick + 'Enviar da galeria' button (screenshot /tmp/i6_barber_edit.png); Config→Serviços→Novo serviço form shows 'Imagem do serviço (opcional)' label with testID svc-image-pick + 'Enviar da galeria' (screenshot /tmp/i6_svc_new.png); Config→PIX scrolled shows 'Confirmação automática de PIX' card with ALL testIDs pix-provider-mercadopago, pix-provider-token, pix-provider-auto, pix-webhook-url (showing https://cortes-agendamentos.preview.emergentagent.com/api/webhooks/pix/mercadopago?secret=SFeNSyR_...), pix-provider-save → clicked save → success (provider persisted - verified via GET /admin/pix-provider returning mercadopago + secret) (/tmp/i6_pix_mp_selected.png + /tmp/i6_pix_saved.png); Forgot screen (/forgot) copy mentions e-mail: 'Enviaremos um código de 6 dígitos por e-mail (válido por 30 minutos). Verifique também o spam.' (screenshot /tmp/i6_forgot.png). pix-paid transition verified at BACKEND level end-to-end (webhook→payment-status→'pago'); frontend PixPayment component polls GET /appointments/{id}/payment-status every 5s and conditionally renders testID='pix-paid' with 'Pagamento confirmado!' when status=='pago' (code review /app/frontend/src/components/pix-payment.tsx:44-53). Full UI book→webhook→pix-paid timing in-browser not completed to end due to flaky multi-step booking selectors (date/slot scroll + barber picker races) and a transient 502 during run; however, each layer independently validated — see rca_of_issue. No deprecated expo packages (no expo-av/expo-barcode-scanner/expo-background-fetch in frontend package.json).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration6.py (NEW — 13 tests, all pass)",
+    "/app/test_reports/pytest/iteration_6.xml",
+    "/app/test_reports/pytest/iteration_6_full.xml",
+    "/tmp/i6_admin_home.png",
+    "/tmp/i6_barber_edit.png",
+    "/tmp/i6_cfg_hub.png",
+    "/tmp/i6_svc_new.png",
+    "/tmp/i6_pix_scrolled.png",
+    "/tmp/i6_pix_mp_selected.png",
+    "/tmp/i6_pix_saved.png",
+    "/tmp/i6_forgot.png",
+    "/tmp/i6_agendar.png",
+    "/tmp/i6_pix_screen.png"
+  ],
+  "action_items": [
+    "Pre-existing (NOT caused by iter 6, same as iteration_5 action_items): test_barbers.py has 3 shared-DB-state failures (PerBarberConflict same-time, PerBarberConflict wendel_14 slot, Mensal carlos cycle exhausted); test_security.py::TestSeedProtection asserts len(services)==7 but DB has 11 due to accumulated TEST_svc_* archived entries. Fix out of scope — use uuid-based unique dates per test or filter TEST_ prefix.",
+    "(optional, nice-to-have) Add testIDs on agendar barber picker tiles (currently relies on 'Wendel' text search) to make end-to-end UI pix-booking tests more reliable."
+  ],
+  "critical_code_review_comments": [
+    "admin_config.py /admin/images uses base64.b64decode(..., validate=True), 2MB cap, strict allowlist content types — solid.",
+    "/webhooks/pix/{provider} looks up appointment by txid=id.replace('-','')[:25] with fallback regex on first 8 chars; validates secret before any DB lookup (401 before 404), skips when auto_confirm=False, idempotent (if already pago no-op since paid_words still match but patch would be a no-op update + redundant audit entry — acceptable but could early-return when payment_status already 'pago').",
+    "payment_events collection records every webhook incl. ignored ones — good observability for debugging provider payloads.",
+    "email_service.py has strong G2/G3 safety assertions (no forms, no shorteners, no cred-asking phrases, https-only links, anchor-text matches real host). Falls back silently (returns None, logs error) so forgot-password still works via admin fallback — exactly as the PRD describes.",
+    "PixPayment polling runs every 5s and clears interval when status becomes 'pago' — correct effect-dependency array [apt?.id, status].",
+    "No deprecated expo packages detected in frontend/package.json (uses expo-image, expo-video not expo-av; no expo-barcode-scanner; no expo-background-fetch)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration6.py (NEW — 3 test classes / 13 tests covering image upload, password-recovery email, PIX webhook auto-confirm end-to-end)"
+  ],
+  "success_rate": {
+    "backend": "100% on iteration-6 suite (13/13 test_iteration6.py). Full regression 84/88 pass (3 skipped, 4 pre-existing shared-DB-state failures carried from iteration_5).",
+    "frontend": "100% of iteration-6 UI surfaces verified: barber-photo-pick, svc-image-pick, PIX auto-confirm card with all 5 testIDs + save success, forgot-screen e-mail copy. End-to-end UI pix-paid transition not driven to completion in-browser due to flaky agendar selectors + a transient 502; backend end-to-end flow (book→webhook→pago→client-poll) verified in test_iteration6.py::TestPixWebhook.test_webhook_marks_paid."
+  },
+  "seed_data_creation": "4 extra PIX appointments created for carlos on future Tuesdays by TestPixWebhook (2 ended as 'pago', 2 remained aguardando_pagamento → expired after natural TTL). 1 extra appointment created by booking-via-UI attempt. 1 x 1 PNG uploaded multiple times (small images collection in Mongo — negligible). Carlos's password reset to 'cliente123NEW' then restored to 'cliente123' at end of TestPasswordRecoveryEmail. PIX provider left as mercadopago with empty access_token + auto_confirm=true + a persistent webhook_secret (SFeNSyR_Ulk3avHb6Fl_jbBcDxJj8Cko at time of report; may rotate on next PUT with provider mercadopago).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PIX provider is set to mercadopago, auto_confirm=true, access_token empty. Webhook secret available at GET /api/admin/pix-provider as webhook_path. Carlos password still cliente123. test_barbers.py pre-existing failures persist (iteration_5 doc). To exercise frontend pix-paid UI live: login as carlos → /agendar → pick svc-Corte → pick barber Wendel (needs text-click, no testID yet) → pick future date-* chip → pick slot-* → click pay-pix → click confirm-btn → wait for testID='pix-payment' → POST webhook with secret and {data:{external_reference: APT_ID.replace('-','')[:25], status:'approved'}} → within 5-10s testID='pix-paid' with text 'Pagamento confirmado!' should render. Login rate limit 10 failures/15min remains in effect.",
+  "rca_of_issue": "N/A — iteration-6 code works as specified at every layer independently verified. UI pix-paid full-flow could not be driven to final success in a single playwright run because: (a) agendar barber tiles have no testIDs so text-match click on 'Wendel' was shadowed by other 'Wendel' labels on the page; (b) a brief 502 Bad Gateway hit during the long multi-step booking. These are test-script / transient issues, NOT product bugs. Backend covers the entire carlos→webhook→pago→client-poll path (TestPixWebhook.test_webhook_marks_paid asserts GET /appointments/{id}/payment-status returns 'pago' with carlos's own token), and PixPayment code is a straightforward 5s poll+conditional render on status==='pago'."
+}

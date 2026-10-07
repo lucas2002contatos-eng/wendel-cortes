@@ -2,13 +2,14 @@ import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { Image } from "expo-image";
 import Icon from "@react-native-vector-icons/feather";
 import { colors, spacing, radius } from "@/src/theme";
+import { imgUrl } from "@/src/components/image-field";
 
 export type BarberLite = { id: string; name: string; photo_url?: string; description?: string; window?: { start: string; end: string } | null };
 
 export function BarberAvatar({ barber, size = 56 }: { barber: { name: string; photo_url?: string }; size?: number }) {
   const initials = barber.name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
   if (barber.photo_url) {
-    return <Image source={barber.photo_url} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surfaceTertiary }} contentFit="cover" />;
+    return <Image source={imgUrl(barber.photo_url)} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surfaceTertiary }} contentFit="cover" />;
   }
   return (
     <View style={[styles.avatar, { width: size, height: size, borderRadius: size / 2 }]}>

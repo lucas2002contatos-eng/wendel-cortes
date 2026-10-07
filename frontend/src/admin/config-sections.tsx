@@ -224,11 +224,50 @@ export function PixSection({ settings, onSaved }: { settings: any; onSaved: () =
         <Text style={s.lbl}>Nome do favorecido (até 25 letras)</Text><TextInput testID="pix-holder-input" style={s.input} maxLength={25} value={pix.holder_name} onChangeText={(v) => setPix({ ...pix, holder_name: v })} placeholderTextColor={colors.muted} />
         <Text style={s.lbl}>Cidade (até 15 letras)</Text><TextInput testID="pix-city-input" style={s.input} maxLength={15} value={pix.city} onChangeText={(v) => setPix({ ...pix, city: v })} placeholderTextColor={colors.muted} />
         <GoldButton testID="pix-save-btn" label="Salvar PIX" onPress={save} style={{ marginTop: spacing.lg }} />
-        <Text style={s.hint}>O QR Code gerado segue o padrão oficial PIX (BR Code) com o valor exato do atendimento. Estrutura pronta para integração futura com API de pagamentos.</Text>
+        <Text style={s.hint}>O QR Code gerado segue o padrão oficial PIX (BR Code) com o valor exato do atendimento.</Text>
       </View>
+      <PixProviderCard />
     </View>
   );
 }
+
+/** Automatic PIX confirmation: provider + token + webhook URL (structure ready; works once a key is added). */
+function PixProviderCard() {
+  const { ok, err, setErr, flash } = useFlash();
+  const [cfg, setCfg] = useState<any>(null);
+  useEffect(() => { api("/admin/pix-provider").then(setCfg).catch(() => setCfg({ provider: "none", access_token: "", auto_confirm: true })); }, []);
+  const save = async () => {
+    setErr(null);
+    try { setCfg(await api("/admin/pix-provider", { method: "PUT", body: JSON.stringify({ provider: cfg.provider, access_token: cfg.access_token, auto_confirm: cfg.auto_confirm !== false, webhook_secret: cfg.webhook_secret || "" }) })); flash("Provedor salvo!"); } catch (e: any) { setErr(e.message); }
+  };
+  if (!cfg) return null;
+  const webhookUrl = `${BACKEND_URL}${cfg.webhook_path || ""}`;
+  return (
+    <View style={s.card}>
+      <Flash ok={ok} err={err} />
+      <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>Confirmação automática de PIX</Text>
+      <Text style={s.hint}>Quando o cliente paga, o provedor avisa o site (webhook) e o pagamento é marcado como PAGO sozinho. Sem provedor, a confirmação é manual em Pagamentos.</Text>
+      <Text style={s.lbl}>Provedor</Text>
+      <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap", marginTop: 4 }}>
+        {[["none", "Nenhum (manual)"], ["mercadopago", "Mercado Pago"], ["asaas", "Asaas"], ["efi", "Efí"], ["outro", "Outro"]].map(([k, l]) => (
+          <Pressable key={k} testID={`pix-provider-${k}`} onPress={() => setCfg({ ...cfg, provider: k })} style={[s.chip, cfg.provider === k && s.chipSel]}><Text style={[s.chipTxt, cfg.provider === k && { color: colors.onBrandPrimary }]}>{l}</Text></Pressable>
+        ))}
+      </View>
+      {cfg.provider !== "none" && (
+        <>
+          <Text style={s.lbl}>Access Token / chave de API do provedor</Text>
+          <TextInput testID="pix-provider-token" style={s.input} autoCapitalize="none" secureTextEntry={cfg.access_token === "***"} value={cfg.access_token} onChangeText={(v) => setCfg({ ...cfg, access_token: v })} placeholder="Cole aqui quando tiver a conta" placeholderTextColor={colors.muted} />
+          <View style={[s.rowBetween, { marginTop: spacing.md }]}><Text style={{ color: colors.onSurface, fontWeight: "600" }}>Marcar como pago automaticamente</Text><Switch testID="pix-provider-auto" value={cfg.auto_confirm !== false} onValueChange={(v) => setCfg({ ...cfg, auto_confirm: v })} trackColor={{ true: colors.brandPrimary, false: colors.surfaceTertiary }} thumbColor={colors.onSurface} /></View>
+          <Text style={s.lbl}>URL do webhook (cadastre no painel do provedor)</Text>
+          <Text selectable style={[s.input, { fontSize: 11 }]} testID="pix-webhook-url">{webhookUrl}</Text>
+          <Text style={s.hint}>O provedor deve enviar o identificador da cobrança (txid / external_reference) igual ao gerado no QR Code. Eventos de pagamento aprovado marcam o atendimento como pago e ficam registrados na Auditoria.</Text>
+        </>
+      )}
+      <GoldButton testID="pix-provider-save" label="Salvar provedor" onPress={save} style={{ marginTop: spacing.lg }} />
+    </View>
+  );
+}
+
 
 // ------------------------------------------------------------- Pagamentos
 const PAY_LABEL: Record<string, string> = { aguardando_pagamento: "Aguardando PIX", pendente_confirmacao: "Pendente (presencial)", pago: "Pago", expirado: "Expirado", cancelado: "Cancelado" };

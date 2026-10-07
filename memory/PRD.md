@@ -32,9 +32,10 @@ Aplicativo mobile de gestão para barbearia com dois perfis (cliente e admin/bar
     - Seed: barbeiros Wendel (Seg–Sáb 09–18) e João (Ter–Sáb 10–20); registros antigos migrados para Wendel.
 15. **Hardening de segurança (auditoria)**: JWT_SECRET forte obrigatório (≥32 chars, sem fallback), tokens de 7 dias; login sem pré-preenchimento; rate limit em `/auth/login` (10 falhas/15 min por IP e e-mail → 429); senha mínima 6; mensagem neutra no cadastro; `/api/seed` só admin; dados demo (clientes de teste) só com `SEED_DEMO_DATA=true` (dev); admin criado com `ADMIN_PASSWORD` (padrão admin123 apenas em dev — **definir em produção**); `/queue/today` anonimiza outros clientes para não-admin (sem telefone/user_id, nome abreviado); `/register-push` autenticado; CORS via `CORS_ORIGINS`; validação de data/hora → 400.
 
-## Credenciais
-- Admin: `admin@wendelcortes.com` / `admin123`
-- Clientes seed: carlos, joao, rafael, marcos, lucas @test.com / `cliente123`
+## Credenciais (produção limpa — iteração 7)
+- Admin: `admin@wendelcortes.com` / `WC6DeNDoXnWy#2026` (ADMIN_PASSWORD no backend/.env)
+- Banco zerado em 2026-10-06; sem clientes/barbeiros de teste (`SEED_DEMO_DATA=false`). Ver `/app/memory/test_credentials.md`.
+- Entrega final (URL + credenciais + tutorial) enviada ao usuário em pt-BR.
 
 ## Stack
 - Backend: FastAPI + MongoDB + JWT + bcrypt + httpx (push relay)
@@ -51,3 +52,4 @@ Aplicativo mobile de gestão para barbearia com dois perfis (cliente e admin/bar
     - `backend/pix.py`: BR Code EMV estático com CRC16 (QR válido) — `GET /appointments/{id}/pix`.
     - Serviços: `archived`, `image_url`; excluir com histórico → arquiva. Barbeiros idem.
     - Frontend: `src/branding.tsx` (logo dinâmico em landing/login/home/painéis/web frame + favicon), `app/(auth)/forgot.tsx`, `src/components/pix-payment.tsx` (QR + copia e cola), Config hub em `app/(admin)/mais.tsx` com `src/admin/config-sections.tsx` e `services-section.tsx`, `app/(admin)/perfil.tsx` (barbeiro), tabs por papel em `(admin)/_layout.tsx`, cliente edita nome/telefone (`PUT /auth/me`).
+17. **Iteração 6**: upload de imagens genérico (`POST /admin/images` → `GET /public/images/{id}`; componente `src/components/image-field.tsx` usado na foto do barbeiro e imagem do serviço); e-mail de recuperação via Emergent Resend (`backend/email_service.py`, env `EMERGENT_EMAIL_KEY`/`EMAIL_FROM_NAME`; código também fica visível ao admin como fallback; domínios inválidos como test.com são rejeitados pelo provedor → 422 logado); confirmação PIX automática: `settings.pix_provider` {provider none|mercadopago|asaas|efi|outro, access_token, webhook_secret, auto_confirm}, `PUT/GET /admin/pix-provider`, webhook `POST /api/webhooks/pix/{provider}?secret=...` (txid = id do agendamento sem hífens, 25 chars; status aprovado → payment_status pago + auditoria + `payment_events`), `GET /appointments/{id}/payment-status` (tela PIX faz polling 5s e mostra "Pagamento confirmado").

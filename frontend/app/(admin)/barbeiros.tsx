@@ -7,6 +7,7 @@ import { colors, spacing, radius } from "@/src/theme";
 import { api } from "@/src/api";
 import { Badge, GoldButton, GhostButton } from "@/src/ui";
 import { BarberAvatar } from "@/src/components/barber-picker";
+import { ImageField } from "@/src/components/image-field";
 
 const WD_SHORT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 const WD_CHIP = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
@@ -145,17 +146,12 @@ export default function Barbeiros() {
           <Pressable testID="barber-form-back" onPress={() => setEditing(null)} style={styles.back}><Icon name="arrow-left" size={18} color={colors.muted} /><Text style={styles.backTxt}>Voltar</Text></Pressable>
           <Text style={styles.h1}>{editing.id ? "Editar barbeiro" : "Novo barbeiro"}</Text>
 
-          <View style={[styles.card, { alignItems: "center", gap: spacing.sm }]}>
-            <BarberAvatar barber={editing} size={84} />
-            <Text style={styles.hint}>A foto é carregada a partir do link informado abaixo.</Text>
-          </View>
 
           <Text style={styles.lbl}>Nome *</Text>
           <TextInput testID="barber-name-input" style={styles.input} value={editing.name} onChangeText={(v) => setEditing({ ...editing, name: v })} placeholder="Ex.: Wendel" placeholderTextColor={colors.muted} />
           <Text style={styles.lbl}>Telefone</Text>
           <TextInput testID="barber-phone-input" style={styles.input} value={editing.phone} onChangeText={(v) => setEditing({ ...editing, phone: v })} keyboardType="phone-pad" placeholder="11999999999" placeholderTextColor={colors.muted} />
-          <Text style={styles.lbl}>Link da foto</Text>
-          <TextInput testID="barber-photo-input" style={styles.input} value={editing.photo_url} onChangeText={(v) => setEditing({ ...editing, photo_url: v })} autoCapitalize="none" placeholder="https://..." placeholderTextColor={colors.muted} />
+          <ImageField testID="barber-photo-pick" label="Foto do barbeiro" round value={editing.photo_url} onChange={(url) => setEditing({ ...editing, photo_url: url })} />
           <Text style={styles.lbl}>Descrição</Text>
           <TextInput testID="barber-desc-input" style={[styles.input, { minHeight: 64, textAlignVertical: "top" }]} multiline value={editing.description} onChangeText={(v) => setEditing({ ...editing, description: v })} placeholder="Especialidades, experiência..." placeholderTextColor={colors.muted} />
           <Text style={styles.lbl}>Comissão (%) — opcional, preparado para uso futuro</Text>

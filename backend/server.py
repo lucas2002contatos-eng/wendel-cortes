@@ -1116,15 +1116,17 @@ async def seed():
     # barbers (Wendel: Mon–Sat 09–18 · João: Tue–Sat 10–20)
     if await db.barbers.count_documents({}) == 0:
         wendel_hours = [{"weekday": i, "enabled": i < 6, "start": "09:00", "end": "18:00"} for i in range(7)]
-        joao_hours = [{"weekday": i, "enabled": 1 <= i <= 5, "start": "10:00", "end": "20:00"} for i in range(7)]
-        await db.barbers.insert_many([
-            {"id": str(uuid.uuid4()), "name": "Wendel", "phone": "11999999999", "photo_url": "",
+        barbers_seed = [
+            {"id": str(uuid.uuid4()), "name": "Wendel", "phone": "", "photo_url": "",
              "description": "Fundador · especialista em cortes clássicos e degradê", "active": True,
              "work_hours": wendel_hours, "commission_pct": None, "created_at": now_utc().isoformat()},
-            {"id": str(uuid.uuid4()), "name": "João", "phone": "11988880000", "photo_url": "",
-             "description": "Barba, navalha e visagismo", "active": True,
-             "work_hours": joao_hours, "commission_pct": None, "created_at": now_utc().isoformat()},
-        ])
+        ]
+        if SEED_DEMO_DATA:  # extra demo barber only in development
+            joao_hours = [{"weekday": i, "enabled": 1 <= i <= 5, "start": "10:00", "end": "20:00"} for i in range(7)]
+            barbers_seed.append({"id": str(uuid.uuid4()), "name": "João", "phone": "11988880000", "photo_url": "",
+                                 "description": "Barba, navalha e visagismo", "active": True,
+                                 "work_hours": joao_hours, "commission_pct": None, "created_at": now_utc().isoformat()})
+        await db.barbers.insert_many(barbers_seed)
     wendel = await db.barbers.find_one({"name": "Wendel"}, {"_id": 0}) or await db.barbers.find_one({}, {"_id": 0})
     # migrate legacy records without barber → Wendel
     if wendel:

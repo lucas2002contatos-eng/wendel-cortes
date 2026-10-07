@@ -49,7 +49,7 @@ export default function Forgot() {
         <Pressable testID="forgot-back" onPress={() => router.back()} style={styles.back}><Icon name="arrow-left" size={18} color={colors.muted} /><Text style={styles.backTxt}>Voltar ao login</Text></Pressable>
         <View style={{ alignItems: "center", marginBottom: spacing.xl }}><Logo size={110} /></View>
         <Text style={styles.title}>Recuperar senha</Text>
-        <Text style={styles.sub}>{step === 1 ? "Informe o e-mail cadastrado. A barbearia enviará um código de 6 dígitos (válido por 30 minutos) pelo seu WhatsApp." : "Digite o código recebido e crie uma nova senha."}</Text>
+        <Text style={styles.sub}>{step === 1 ? "Informe o e-mail cadastrado. Enviaremos um código de 6 dígitos por e-mail (válido por 30 minutos). Verifique também o spam." : "Digite o código recebido e crie uma nova senha."}</Text>
 
         {step === 1 ? (
           <>

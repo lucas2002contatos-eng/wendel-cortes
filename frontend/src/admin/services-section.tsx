@@ -5,6 +5,8 @@ import { colors, spacing } from "@/src/theme";
 import { api } from "@/src/api";
 import { Badge, GoldButton } from "@/src/ui";
 import { Flash, s } from "@/src/admin/config-sections";
+import { ImageField, imgUrl } from "@/src/components/image-field";
+import { Image } from "expo-image";
 
 const empty = () => ({ name: "", description: "", price: "", duration_min: "30", image_url: "" });
 
@@ -53,7 +55,7 @@ export function ServicesSection({ services, onChanged }: { services: any[]; onCh
             <View style={{ flex: 1 }}><Text style={s.lbl}>Preço (R$) *</Text><TextInput testID="svc-price-input" style={s.input} keyboardType="decimal-pad" value={String(form.price)} onChangeText={(v) => setForm({ ...form, price: v })} placeholder="40,00" placeholderTextColor={colors.muted} /></View>
             <View style={{ flex: 1 }}><Text style={s.lbl}>Duração (min) *</Text><TextInput testID="svc-duration-input" style={s.input} keyboardType="number-pad" value={String(form.duration_min)} onChangeText={(v) => setForm({ ...form, duration_min: v })} placeholderTextColor={colors.muted} /></View>
           </View>
-          <Text style={s.lbl}>Link da imagem (opcional)</Text><TextInput testID="svc-image-input" style={s.input} autoCapitalize="none" value={form.image_url} onChangeText={(v) => setForm({ ...form, image_url: v })} placeholder="https://..." placeholderTextColor={colors.muted} />
+          <ImageField testID="svc-image-pick" label="Imagem do serviço (opcional)" value={form.image_url} onChange={(url) => setForm({ ...form, image_url: url })} />
           <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.lg }}>
             <GoldButton testID="svc-save-btn" label="Salvar" onPress={save} style={{ flex: 1 }} />
             <Pressable testID="svc-cancel-btn" onPress={() => setForm(null)} style={[s.btnGhost, { justifyContent: "center" }]}><Text style={s.btnGhostTxt}>Cancelar</Text></Pressable>
@@ -65,7 +67,8 @@ export function ServicesSection({ services, onChanged }: { services: any[]; onCh
 
       {visible.map((sv) => (
         <View key={sv.id} style={s.card} testID={`service-${sv.name}`}>
-          <View style={s.rowBetween}>
+          <View style={[s.rowBetween, { gap: spacing.md }]}>
+            {!!sv.image_url && <Image source={imgUrl(sv.image_url)} style={{ width: 48, height: 48, borderRadius: 8 }} contentFit="cover" />}
             <View style={{ flex: 1 }}>
               <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>{sv.name}</Text>
               <Text style={s.hint}>R$ {Number(sv.price).toFixed(2)} · {sv.duration_min} min{sv.description ? ` · ${sv.description}` : ""}</Text>

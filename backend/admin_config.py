@@ -3,6 +3,7 @@ audit log, barber accounts, password recovery. Mounted from server.py via make_c
 from __future__ import annotations
 
 import base64
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, EmailStr, Field
 
 from pix import build_pix_payload, normalize_pix_key
+from email_service import send_email, password_reset_html, email_enabled
 
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/x-icon", "image/svg+xml"}
@@ -85,6 +87,16 @@ class ResetBody(BaseModel):
     new_password: str = Field(min_length=6)
 
 
+class PixProviderBody(BaseModel):
+    provider: str = Field("none", pattern="^(none|mercadopago|asaas|efi|outro)$")
+    access_token: Optional[str] = ""
+    webhook_secret: Optional[str] = ""
+    auto_confirm: bool = True
+
+
+DEFAULT_PIX_PROVIDER = {"provider": "none", "access_token": "", "webhook_secret": "", "auto_confirm": True}
+
+
 # ----------------------------------------------------------------- router ---
 def make_config_router(db, get_current_user, require_admin, require_staff, now_utc, hash_password, audit) -> APIRouter:
     r = APIRouter()
@@ -154,6 +166,94 @@ def make_config_router(db, get_current_user, require_admin, require_staff, now_u
         await db.settings.update_one({"id": "main"}, {"$unset": {f"branding.{kind}": ""}})
         await audit(user, f"branding.{kind}.reset", "settings", "main", before, None)
         return {"ok": True}
+
+    # ------------------------------------------------------------ images ---
+    @r.post("/admin/images")
+    async def upload_image(body: ImageUploadBody, user: dict = Depends(require_admin)):
+        """Generic image upload (barber photo, service image). Returns a public URL path."""
+        if body.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(400, "Formato de imagem não suportado (use PNG, JPG ou WEBP)")
+        try:
+            raw = base64.b64decode(body.data_base64.split(",")[-1], validate=True)
+        except Exception:
+            raise HTTPException(400, "Imagem inválida")
+        if len(raw) > MAX_IMAGE_BYTES:
+            raise HTTPException(400, "Imagem muito grande (máximo 2 MB)")
+        doc = {"id": str(uuid.uuid4()), "content_type": body.content_type, "size": len(raw), "data": raw, "created_at": now_utc().isoformat(), "by": user["name"]}
+        await db.images.insert_one(doc)
+        return {"id": doc["id"], "url": f"/api/public/images/{doc['id']}"}
+
+    @r.get("/public/images/{image_id}")
+    async def get_image(image_id: str):
+        a = await db.images.find_one({"id": image_id})
+        if not a:
+            raise HTTPException(404, "Imagem não encontrada")
+        return Response(content=bytes(a["data"]), media_type=a["content_type"], headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+    # ------------------------------------------- PIX provider (auto-confirm) ---
+    @r.put("/admin/pix-provider")
+    async def update_pix_provider(body: PixProviderBody, user: dict = Depends(require_admin)):
+        s = await settings_doc()
+        before = {**DEFAULT_PIX_PROVIDER, **(s.get("pix_provider") or {})}
+        cfg = body.model_dump()
+        if not cfg["webhook_secret"]:
+            cfg["webhook_secret"] = before.get("webhook_secret") or secrets.token_urlsafe(24)
+        if cfg["access_token"] == "***":  # unchanged (masked) token
+            cfg["access_token"] = before.get("access_token", "")
+        await db.settings.update_one({"id": "main"}, {"$set": {"pix_provider": cfg}}, upsert=True)
+        await audit(user, "pix_provider.update", "settings", "main", {**before, "access_token": "***" if before.get("access_token") else ""}, {**cfg, "access_token": "***" if cfg["access_token"] else ""})
+        return {**cfg, "access_token": "***" if cfg["access_token"] else "", "webhook_path": f"/api/webhooks/pix/{cfg['provider']}?secret={cfg['webhook_secret']}"}
+
+    @r.get("/admin/pix-provider")
+    async def get_pix_provider(_: dict = Depends(require_admin)):
+        s = await settings_doc()
+        cfg = {**DEFAULT_PIX_PROVIDER, **(s.get("pix_provider") or {})}
+        return {**cfg, "access_token": "***" if cfg.get("access_token") else "", "webhook_path": f"/api/webhooks/pix/{cfg['provider']}?secret={cfg.get('webhook_secret') or ''}"}
+
+    @r.post("/webhooks/pix/{provider}")
+    async def pix_webhook(provider: str, payload: dict, secret: Optional[str] = None):
+        """Provider → us. Looks up the appointment by txid / external_reference and marks it paid.
+        Structure ready for Mercado Pago / Asaas / Efí payload shapes; identity validated by the shared secret."""
+        s = await settings_doc()
+        cfg = {**DEFAULT_PIX_PROVIDER, **(s.get("pix_provider") or {})}
+        if not cfg.get("webhook_secret") or secret != cfg["webhook_secret"]:
+            raise HTTPException(401, "Webhook não autorizado")
+        if not cfg.get("auto_confirm"):
+            return {"ok": True, "ignored": "auto_confirm desligado"}
+        # txid candidates across providers
+        txid = (payload.get("txid") or payload.get("external_reference") or (payload.get("data") or {}).get("external_reference")
+                or (payload.get("payment") or {}).get("externalReference") or (payload.get("pix") or [{}])[0].get("txid") or "")
+        status = str(payload.get("status") or (payload.get("data") or {}).get("status") or (payload.get("payment") or {}).get("status") or payload.get("event") or "").lower()
+        paid_words = ("approved", "paid", "received", "confirmed", "concluida", "pago", "payment_received", "payment_confirmed", "pix")
+        if not txid:
+            raise HTTPException(400, "txid/external_reference ausente")
+        apt = await db.appointments.find_one({"id": {"$regex": f"^{re.escape(txid[:8])}"}}, {"_id": 0}) if len(txid) >= 8 else None
+        # txid is the appointment id without dashes (first 25 chars) — match by compacted id
+        if not apt:
+            async for a in db.appointments.find({"payment_method": "pix", "payment_status": {"$ne": "pago"}}, {"_id": 0}):
+                if a["id"].replace("-", "")[:25] == txid[:25]:
+                    apt = a; break
+        if not apt:
+            raise HTTPException(404, "Agendamento não encontrado para este txid")
+        if not any(w in status for w in paid_words):
+            await db.payment_events.insert_one({"id": str(uuid.uuid4()), "provider": provider, "appointment_id": apt["id"], "status": status, "payload": payload, "at": now_utc().isoformat()})
+            return {"ok": True, "ignored": f"status '{status}' não é pagamento aprovado"}
+        patch = {"payment_status": "pago", "payment_updated_at": now_utc().isoformat(), "payment_updated_by": f"webhook:{provider}", "payment_provider": provider}
+        if apt["status"] == "pagamento_pendente":
+            patch["status"] = "pago"
+        await db.appointments.update_one({"id": apt["id"]}, {"$set": patch})
+        await db.payment_events.insert_one({"id": str(uuid.uuid4()), "provider": provider, "appointment_id": apt["id"], "status": status, "payload": payload, "at": now_utc().isoformat()})
+        await audit({"id": "system", "name": f"Webhook {provider}", "role": "system"}, "payment.webhook.paid", "appointment", apt["id"], {"payment_status": apt.get("payment_status")}, patch)
+        return {"ok": True, "appointment_id": apt["id"], "payment_status": "pago"}
+
+    @r.get("/appointments/{aid}/payment-status")
+    async def appointment_payment_status(aid: str, user: dict = Depends(get_current_user)):
+        apt = await db.appointments.find_one({"id": aid}, {"_id": 0, "payment_status": 1, "status": 1, "user_id": 1})
+        if not apt:
+            raise HTTPException(404, "Agendamento não encontrado")
+        if user["role"] == "client" and apt["user_id"] != user["id"]:
+            raise HTTPException(403, "Não autorizado")
+        return {"payment_status": apt.get("payment_status"), "status": apt["status"]}
 
     # -------------------------------------------------------------- plan ---
     @r.put("/admin/plan")
@@ -303,8 +403,13 @@ def make_config_router(db, get_current_user, require_admin, require_staff, now_u
                 "id": str(uuid.uuid4()), "email": email, "user_id": u["id"], "client_name": u["name"], "client_phone": u.get("phone", ""),
                 "code_hash": hash_password(code), "code": code,  # plain code visible only to the founder admin to relay via WhatsApp
                 "expires_at": (now_utc() + timedelta(minutes=30)).isoformat(), "created_at": now_utc().isoformat(), "used": False,
+                "email_sent": False,
             })
-        return {"ok": True, "message": "Se o e-mail estiver cadastrado, um código de recuperação (válido por 30 minutos) será enviado a você pela barbearia via WhatsApp."}
+            if email_enabled():
+                sent = await send_email(to=email, subject="Seu código para redefinir a senha", html=password_reset_html(u["name"], code))
+                if sent:
+                    await db.password_resets.update_one({"email": email, "code": code}, {"$set": {"email_sent": True, "email_id": sent}})
+        return {"ok": True, "message": "Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos (válido por 30 minutos). Verifique também a caixa de spam."}
 
     @r.post("/auth/reset")
     async def reset_password(body: ResetBody):
