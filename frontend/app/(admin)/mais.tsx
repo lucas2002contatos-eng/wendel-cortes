@@ -58,6 +58,24 @@ export default function Mais() {
   };
   const logout = async () => { await clearSession(); router.replace("/(auth)/login"); };
 
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [pwErr, setPwErr] = useState<string | null>(null);
+  const [pwMsg, setPwMsg] = useState<string | null>(null);
+  const [savingPw, setSavingPw] = useState(false);
+  const savePassword = async () => {
+    setPwErr(null); setPwMsg(null);
+    if (pw1.length < 6) { setPwErr("A senha deve ter pelo menos 6 caracteres."); return; }
+    if (pw1 !== pw2) { setPwErr("As senhas não coincidem."); return; }
+    setSavingPw(true);
+    try {
+      await api("/auth/password", { method: "PUT", body: JSON.stringify({ new_password: pw1 }) });
+      setPw1(""); setPw2("");
+      setPwMsg("Senha alterada com sucesso!");
+    } catch (e: any) { setPwErr(e.message); }
+    finally { setSavingPw(false); }
+  };
+
   const DAYS = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
 
   return (
@@ -81,6 +99,7 @@ export default function Mais() {
             { k: "finance", l: "Financeiro" },
             { k: "reports", l: "Relatórios" },
             { k: "audit", l: "Auditoria" },
+            { k: "account", l: "Minha conta" },
           ].map((t) => (
             <Pressable key={t.k} testID={`tab-${t.k}`} onPress={() => (t.k === "team" ? router.push("/(admin)/barbeiros") : setTab(t.k as any))} style={[styles.chip, tab === t.k && styles.chipSel]}>
               <Text style={[styles.chipTxt, tab === t.k && { color: colors.onBrandPrimary }]}>{t.l}</Text>
@@ -201,6 +220,22 @@ export default function Mais() {
         {tab === "general" && settings && <GeneralSection settings={settings} onSaved={load} />}
         {tab === "audit" && <AuditSection />}
         {tab === "resets" && <ResetCodesSection />}
+
+        {tab === "account" && (
+          <View>
+            <Text style={styles.sec}>Alterar senha do administrador</Text>
+            <View style={styles.card}>
+              <Text style={styles.lbl}>Nova senha</Text>
+              <TextInput testID="pw-new-input" style={styles.input} secureTextEntry autoCapitalize="none" value={pw1} onChangeText={setPw1} placeholder="Mínimo 6 caracteres" placeholderTextColor={colors.muted} />
+              <Text style={[styles.lbl, { marginTop: spacing.md }]}>Confirmar nova senha</Text>
+              <TextInput testID="pw-confirm-input" style={styles.input} secureTextEntry autoCapitalize="none" value={pw2} onChangeText={setPw2} placeholder="Repita a nova senha" placeholderTextColor={colors.muted} />
+              <Text style={styles.hint}>Você continua logado após a troca. Use a nova senha no próximo acesso.</Text>
+              {pwErr && <Text style={styles.errTxt}>{pwErr}</Text>}
+              {pwMsg && <Text style={styles.okTxt}>{pwMsg}</Text>}
+              <GoldButton testID="pw-save-btn" label={savingPw ? "Salvando..." : "Salvar nova senha"} disabled={savingPw} onPress={savePassword} style={{ marginTop: spacing.lg }} />
+            </View>
+          </View>
+        )}
 
         {tab === "reports" && (
           <View style={{ gap: spacing.md }}>

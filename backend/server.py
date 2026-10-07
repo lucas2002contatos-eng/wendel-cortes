@@ -313,6 +313,18 @@ async def update_me(body: ProfileBody, user: dict = Depends(get_current_user)):
     return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
 
 
+class PasswordBody(BaseModel):
+    new_password: str = Field(min_length=6, max_length=72)
+
+
+@api.put("/auth/password")
+async def change_password(body: PasswordBody, user: dict = Depends(require_admin)):
+    """Admin changes own password (already authenticated — no current password required)."""
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": hash_password(body.new_password)}})
+    await audit(user, "senha_alterada", "user", user["id"], None, {"email": user.get("email")})
+    return {"ok": True}
+
+
 # =============================== services ====================================
 @api.get("/services")
 async def list_services(user: dict = Depends(get_current_user)):
