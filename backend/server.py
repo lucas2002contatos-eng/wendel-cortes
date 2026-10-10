@@ -734,13 +734,16 @@ async def create_subscription(body: SubscriptionCreateBody, user: dict = Depends
     existing = await active_subscription(user["id"])
     if existing:
         raise HTTPException(400, "Você já possui uma assinatura ativa")
+    if await db.subscriptions.find_one({"user_id": user["id"], "status": "pending_payment"}):
+        raise HTTPException(400, "Você já tem uma assinatura aguardando pagamento. Pague na barbearia para ativá-la.")
     settings = await db.settings.find_one({"id": "main"}, {"_id": 0})
     plan = {**DEFAULT_PLAN, **(settings.get("plan") or {})}
     if not plan.get("active", True):
         raise HTTPException(400, "O plano Cliente Mensal não está disponível no momento")
     price = plan["price"]
     cuts = plan["cuts"]
-    status = "active" if body.payment_method in ("pix", "cartao") else "pending_payment"
+    # Every method (PIX, cartão, dinheiro) is paid at the shop and confirmed by the admin.
+    status = "pending_payment"
     sub = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
@@ -760,8 +763,6 @@ async def create_subscription(body: SubscriptionCreateBody, user: dict = Depends
     }
     await db.subscriptions.insert_one(sub.copy())
     sub.pop("_id", None)
-    if status == "active":
-        await send_push([user["id"]], {"title": "Assinatura ativada", "message": f"{plan['name']} ativo! {cuts} cortes disponíveis."})
     return sub
 
 
@@ -780,8 +781,37 @@ async def my_subscription(user: dict = Depends(get_current_user)):
 
 
 @api.put("/subscription/{sid}/mark-paid")
-async def mark_sub_paid(sid: str, _: dict = Depends(require_admin)):
-    await db.subscriptions.update_one({"id": sid}, {"$set": {"status": "active"}})
+async def mark_sub_paid(sid: str, user: dict = Depends(require_admin)):
+    """Admin confirms the payment received at the shop → plan becomes active from now."""
+    sub = await db.subscriptions.find_one({"id": sid}, {"_id": 0})
+    if not sub:
+        raise HTTPException(404, "Assinatura não encontrada")
+    if sub["status"] != "pending_payment":
+        raise HTTPException(400, "Esta assinatura não está aguardando pagamento")
+    cycle_days = (sub.get("plan_snapshot") or {}).get("cycle_days") or DEFAULT_PLAN["cycle_days"]
+    patch = {
+        "status": "active",
+        "period_start": now_utc().isoformat(),
+        "period_end": (now_utc() + timedelta(days=cycle_days)).isoformat(),
+        "paid_at": now_utc().isoformat(),
+        "paid_confirmed_by": user.get("name"),
+    }
+    await db.subscriptions.update_one({"id": sid}, {"$set": patch})
+    await audit(user, "subscription.mark_paid", "subscription", sid, {"status": sub["status"]}, patch)
+    await send_push([sub["user_id"]], {"title": "Assinatura ativada", "message": f"{sub['plan_name']} ativo! {sub['cuts_total']} cortes disponíveis."})
+    return {"ok": True}
+
+
+@api.put("/subscription/{sid}/cancel")
+async def cancel_sub(sid: str, user: dict = Depends(require_admin)):
+    """Admin cancels a subscription that was never paid (or an active one)."""
+    sub = await db.subscriptions.find_one({"id": sid}, {"_id": 0})
+    if not sub:
+        raise HTTPException(404, "Assinatura não encontrada")
+    if sub["status"] not in ("pending_payment", "active"):
+        raise HTTPException(400, "Esta assinatura não pode ser cancelada")
+    await db.subscriptions.update_one({"id": sid}, {"$set": {"status": "canceled", "canceled_at": now_utc().isoformat()}})
+    await audit(user, "subscription.cancel", "subscription", sid, {"status": sub["status"]}, {"status": "canceled"})
     return {"ok": True}
 
 

@@ -18,6 +18,7 @@ function fmtDate(d: Date) {
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [sub, setSub] = useState<any>(null);
+  const [plan, setPlan] = useState<any>(null);
   const [nextApt, setNextApt] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -29,8 +30,8 @@ export default function Home() {
     const u = await getUser();
     setUser(u);
     try {
-      const s = await api("/subscription/me");
-      setSub(s);
+      const [s, info] = await Promise.all([api("/subscription/me"), api("/public/info")]);
+      setSub(s); setPlan(info.plan);
       const apts = await api("/appointments/me");
       const upcoming = apts.filter((a: any) => ["agendado", "pago", "pagamento_pendente"].includes(a.status))
         .sort((a: any, b: any) => (a.date + a.time).localeCompare(b.date + b.time));
@@ -93,9 +94,14 @@ export default function Home() {
                   <Text style={styles.heroCaption}>cortes restantes neste ciclo</Text>
                   <Badge label="Plano ativo" tone="gold" />
                 </>
+              ) : sub?.status === "pending_payment" ? (
+                <>
+                  <Text style={styles.heroTitle}>Assinatura aguardando pagamento</Text>
+                  <Text style={styles.heroCaption}>Pague na barbearia para ativar seu plano</Text>
+                </>
               ) : (
                 <>
-                  <Text style={styles.heroTitle}>Assine e tenha 4 cortes/mês</Text>
+                  <Text style={styles.heroTitle}>Assine e tenha {plan?.cuts ?? 4} cortes/mês</Text>
                   <Text style={styles.heroCaption}>Toque para conhecer o plano</Text>
                 </>
               )}

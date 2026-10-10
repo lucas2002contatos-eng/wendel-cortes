@@ -48,7 +48,7 @@ class PlanBody(BaseModel):
 class SubscriptionAdjustBody(BaseModel):
     cuts_used: Optional[int] = Field(None, ge=0)
     cuts_total: Optional[int] = Field(None, ge=1)
-    status: Optional[str] = Field(None, pattern="^(active|pending_payment|cancelled|expired)$")
+    status: Optional[str] = Field(None, pattern="^(active|pending_payment|canceled|expired)$")
     period_end: Optional[str] = None
     note: Optional[str] = ""
 

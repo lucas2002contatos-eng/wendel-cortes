@@ -174,7 +174,7 @@ export function PlanSection({ settings, onSaved }: { settings: any; onSaved: () 
               </View>
               <Text style={s.lbl}>Status</Text>
               <View style={{ flexDirection: "row", gap: spacing.sm, flexWrap: "wrap", marginTop: 4 }}>
-                {["active", "pending_payment", "cancelled", "expired"].map((st) => <Pressable key={st} testID={`sub-status-${st}`} onPress={() => setEditing({ ...editing, status: st })} style={[s.chip, editing.status === st && s.chipSel]}><Text style={[s.chipTxt, editing.status === st && { color: colors.onBrandPrimary }]}>{st}</Text></Pressable>)}
+                {["active", "pending_payment", "canceled", "expired"].map((st) => <Pressable key={st} testID={`sub-status-${st}`} onPress={() => setEditing({ ...editing, status: st })} style={[s.chip, editing.status === st && s.chipSel]}><Text style={[s.chipTxt, editing.status === st && { color: colors.onBrandPrimary }]}>{st}</Text></Pressable>)}
               </View>
               <Text style={s.lbl}>Motivo (fica no histórico)</Text><TextInput testID="sub-note-input" style={s.input} value={editing.note || ""} onChangeText={(v) => setEditing({ ...editing, note: v })} placeholder="Ex.: cortesia, correção..." placeholderTextColor={colors.muted} />
               <View style={{ flexDirection: "row", gap: spacing.sm, marginTop: spacing.md }}>

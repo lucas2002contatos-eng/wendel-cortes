@@ -18,6 +18,8 @@ const FILTERS = [
   { k: "cuts_3", l: "3 cortes" },
   { k: "cuts_4", l: "4 cortes" },
 ];
+const METHOD_LABEL: any = { pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro" };
+const STATUS_LABEL: any = { active: "ATIVO", pending_payment: "PGTO PENDENTE", expired: "EXPIRADO", canceled: "CANCELADO" };
 
 export default function Mensalistas() {
   const insets = useSafeAreaInsets();
@@ -32,6 +34,10 @@ export default function Mensalistas() {
 
   const markPaid = async (id: string) => {
     try { await api(`/subscription/${id}/mark-paid`, { method: "PUT" }); await load(); } catch (e: any) { alert(e.message); }
+  };
+  const cancelSub = async (id: string) => {
+    if (!confirm("Cancelar esta assinatura? O cliente poderá assinar novamente depois.")) return;
+    try { await api(`/subscription/${id}/cancel`, { method: "PUT" }); await load(); } catch (e: any) { alert(e.message); }
   };
 
   const visible = subs.filter((s) => {
@@ -59,19 +65,27 @@ export default function Mensalistas() {
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>{s.client_name}</Text>
-                  <Text style={styles.meta}>{s.client_phone}</Text>
+                  <Text style={styles.meta}>{s.client_phone} · {METHOD_LABEL[s.payment_method] || s.payment_method} · R$ {Number(s.price).toFixed(2)}</Text>
                 </View>
-                <Badge label={s.status.toUpperCase()} tone={s.status === "active" ? "success" : s.status === "pending_payment" ? "warning" : "error"} />
+                <Badge label={STATUS_LABEL[s.status] || s.status.toUpperCase()} tone={s.status === "active" ? "success" : s.status === "pending_payment" ? "warning" : "error"} />
               </View>
               <View style={{ flexDirection: "row", gap: spacing.lg, marginTop: spacing.md }}>
                 <Info label="Restantes" value={`${s.cuts_total - s.cuts_used}/${s.cuts_total}`} />
                 <Info label="Utilizados" value={String(s.cuts_used)} />
-                <Info label="Renovação" value={new Date(s.period_end).toLocaleDateString("pt-BR")} />
+                <Info label={s.status === "pending_payment" ? "Solicitado em" : "Renovação"} value={new Date(s.status === "pending_payment" ? s.created_at : s.period_end).toLocaleDateString("pt-BR")} />
               </View>
               {s.status === "pending_payment" && (
-                <Pressable testID={`markpaid-${s.id}`} onPress={() => markPaid(s.id)} style={styles.btn}>
-                  <Text style={styles.btnTxt}>Marcar como PAGO</Text>
-                </Pressable>
+                <>
+                  <Text style={styles.pendingHint}>Aguardando pagamento de R$ {Number(s.price).toFixed(2)} na barbearia. Confirme após receber.</Text>
+                  <View style={{ flexDirection: "row", gap: spacing.sm }}>
+                    <Pressable testID={`markpaid-${s.id}`} onPress={() => markPaid(s.id)} style={[styles.btn, { flex: 1 }]}>
+                      <Text style={styles.btnTxt}>Confirmar pagamento</Text>
+                    </Pressable>
+                    <Pressable testID={`cancelsub-${s.id}`} onPress={() => cancelSub(s.id)} style={styles.btnGhost}>
+                      <Text style={styles.btnGhostTxt}>Cancelar</Text>
+                    </Pressable>
+                  </View>
+                </>
               )}
             </View>
           ))
@@ -95,5 +109,8 @@ const styles = StyleSheet.create({
   meta: { color: colors.muted, fontSize: 12 },
   btn: { backgroundColor: colors.brandPrimary, padding: spacing.md, borderRadius: radius.sm, alignItems: "center", marginTop: spacing.md },
   btnTxt: { color: colors.onBrandPrimary, fontWeight: "700" },
+  btnGhost: { borderWidth: 1, borderColor: colors.error, padding: spacing.md, borderRadius: radius.sm, alignItems: "center", justifyContent: "center", marginTop: spacing.md, paddingHorizontal: spacing.lg },
+  btnGhostTxt: { color: colors.onSurface, fontWeight: "700" },
+  pendingHint: { color: colors.onSurfaceSecondary, fontSize: 12, marginTop: spacing.sm },
   empty: { color: colors.muted, marginTop: spacing.xl, fontStyle: "italic" },
 });

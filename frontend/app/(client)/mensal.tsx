@@ -10,6 +10,7 @@ import { api } from "@/src/api";
 import { GoldButton, Card, Badge } from "@/src/ui";
 
 const SUB_LABEL: any = { active: { l: "ATIVO", t: "success" }, pending_payment: { l: "PAGAMENTO PENDENTE", t: "warning" }, expired: { l: "EXPIRADO", t: "error" }, canceled: { l: "CANCELADO", t: "error" } };
+const PAY_LABEL: any = { pix: "PIX", cartao: "cartão", dinheiro: "dinheiro" };
 
 export default function Mensal() {
   const insets = useSafeAreaInsets();
@@ -20,11 +21,13 @@ export default function Mensal() {
   const [err, setErr] = useState<string | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [method, setMethod] = useState("pix");
+  const [plan, setPlan] = useState<any>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const s = await api("/subscription/me");
-      setSub(s);
+      const [s, info] = await Promise.all([api("/subscription/me"), api("/public/info")]);
+      setSub(s); setPlan(info.plan);
     } catch {}
     finally { setLoading(false); }
   }, []);
@@ -32,8 +35,12 @@ export default function Mensal() {
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   const subscribe = async () => {
-    setBusy(true); setErr(null);
-    try { await api("/subscription", { method: "POST", body: JSON.stringify({ payment_method: method }) }); await load(); setShowPay(false); }
+    setBusy(true); setErr(null); setOkMsg(null);
+    try {
+      await api("/subscription", { method: "POST", body: JSON.stringify({ payment_method: method }) });
+      await load(); setShowPay(false);
+      setOkMsg("Assinatura solicitada! Realize o pagamento na barbearia e o administrador ativará seu plano.");
+    }
     catch (e: any) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -73,6 +80,20 @@ export default function Mensal() {
               </View>
             </View>
 
+            {okMsg && <View style={{ backgroundColor: colors.success, padding: spacing.md, borderRadius: radius.sm, marginTop: spacing.md }}><Text testID="sub-ok-msg" style={{ color: colors.onSuccess }}>{okMsg}</Text></View>}
+
+            {sub.status === "pending_payment" && (
+              <Card style={{ marginTop: spacing.md, gap: spacing.sm }}>
+                <View style={{ flexDirection: "row", gap: spacing.sm, alignItems: "center" }}>
+                  <Icon name="clock" size={18} color={colors.brandPrimary} />
+                  <Text style={styles.plan}>Aguardando pagamento</Text>
+                </View>
+                <Text testID="sub-pending-hint" style={styles.desc}>
+                  Pague R$ {Number(sub.price).toFixed(2)} na barbearia ({PAY_LABEL[sub.payment_method] || sub.payment_method}). Assim que o administrador confirmar o recebimento, seu plano será ativado e os {sub.cuts_total} cortes ficarão disponíveis.
+                </Text>
+              </Card>
+            )}
+
             {sub.usage_history?.length > 0 && (
               <>
                 <Text style={styles.sec}>Histórico de uso</Text>
@@ -87,7 +108,7 @@ export default function Mensal() {
               </>
             )}
 
-            {sub.status !== "active" && (
+            {(sub.status === "expired" || sub.status === "canceled") && (
               <GoldButton testID="renew-btn" label="Renovar assinatura" onPress={() => setShowPay(true)} style={{ marginTop: spacing.xl }} />
             )}
           </>
@@ -95,17 +116,18 @@ export default function Mensal() {
           <>
             <Card style={{ marginTop: spacing.xl, alignItems: "flex-start", gap: spacing.md }}>
               <Icon name="award" size={32} color={colors.brandPrimary} />
-              <Text style={styles.plan}>Cliente Mensal</Text>
-              <Text style={styles.desc}>Assine e tenha 4 cortes por mês com preço fixo.</Text>
-              <Text style={styles.price}>R$ 89,90<Text style={styles.priceSm}> /mês</Text></Text>
+              <Text style={styles.plan}>{plan?.name || "Cliente Mensal"}</Text>
+              <Text style={styles.desc}>{plan?.description || `Assine e tenha ${plan?.cuts ?? 4} cortes por mês com preço fixo.`}</Text>
+              <Text style={styles.price}>R$ {Number(plan?.price ?? 0).toFixed(2).replace(".", ",")}<Text style={styles.priceSm}> /mês</Text></Text>
               <View style={{ gap: 6, marginTop: spacing.md }}>
-                {["4 cortes por mês", "Renovação automática", "Prioridade no atendimento"].map((b) => (
+                {[`${plan?.cuts ?? 4} cortes por ciclo de ${plan?.cycle_days ?? 30} dias`, "Pagamento na barbearia (PIX, cartão ou dinheiro)", "Prioridade no atendimento"].map((b) => (
                   <View key={b} style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                     <Icon name="check" size={14} color={colors.brandPrimary} />
                     <Text style={{ color: colors.onSurface }}>{b}</Text>
                   </View>
                 ))}
               </View>
+              {!!plan?.rules && <Text style={[styles.desc, { fontSize: 12 }]}>{plan.rules}</Text>}
             </Card>
             <GoldButton testID="subscribe-btn" label="Assinar agora" onPress={() => setShowPay(true)} style={{ marginTop: spacing.xl }} />
           </>
@@ -113,8 +135,9 @@ export default function Mensal() {
 
         {showPay && (
           <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
-            <Text style={styles.sec}>Forma de pagamento</Text>
-            {[{ k: "pix", l: "PIX", i: "zap" }, { k: "cartao", l: "Cartão", i: "credit-card" }, { k: "dinheiro", l: "Dinheiro (pagar no local)", i: "dollar-sign" }].map((p) => (
+            <Text style={styles.sec}>Forma de pagamento (na barbearia)</Text>
+            <Text style={[styles.desc, { marginBottom: spacing.sm }]}>O plano é ativado pelo administrador após o pagamento ser recebido no local.</Text>
+            {[{ k: "pix", l: "PIX (pagar no local)", i: "zap" }, { k: "cartao", l: "Cartão (pagar no local)", i: "credit-card" }, { k: "dinheiro", l: "Dinheiro (pagar no local)", i: "dollar-sign" }].map((p) => (
               <Pressable key={p.k} testID={`sub-pay-${p.k}`} onPress={() => setMethod(p.k)} style={[styles.payRow, method === p.k && { borderColor: colors.brandPrimary }]}>
                 <Icon name={p.i as any} size={18} color={method === p.k ? colors.brandPrimary : colors.muted} />
                 <Text style={[styles.payTxt, method === p.k && { color: colors.onSurface }]}>{p.l}</Text>
