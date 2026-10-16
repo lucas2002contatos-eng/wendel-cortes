@@ -18,7 +18,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
 from barbers import make_barbers_router, available_barbers, barber_free_slots, is_barber_slot_free
-from admin_config import make_config_router, pix_for_appointment, DEFAULT_PLAN, DEFAULT_PIX, DEFAULT_GENERAL
+from admin_config import make_config_router, pix_for_appointment, pix_for_subscription, DEFAULT_PLAN, DEFAULT_PIX, DEFAULT_GENERAL
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -225,6 +225,7 @@ class BlockedSlotBody(BaseModel):
 
 class SubscriptionCreateBody(BaseModel):
     payment_method: Literal["pix", "cartao", "dinheiro"]
+    plan_id: Optional[str] = None  # which monthly plan (None = cheapest active plan)
 
 
 class RegisterPushBody(BaseModel):
@@ -429,6 +430,7 @@ async def public_info():
     days = sorted(s.get("days", []), key=lambda d: d["weekday"])
     shop = {**DEFAULT_SHOP, **(s.get("shop") or {})}
     plan = {**DEFAULT_PLAN, **(s.get("plan") or {})}
+    plans = await db.plans.find({"active": True, "archived": {"$ne": True}}, {"_id": 0}).sort("price", 1).to_list(100)
     branding = s.get("branding") or {}
     return {
         "name": shop.get("name") or "WENDEL CORTES",
@@ -437,6 +439,7 @@ async def public_info():
         "monthly_price": plan["price"],
         "monthly_cuts": plan["cuts"],
         "plan": plan,
+        "plans": plans,
         "services": services,
         "general": {**DEFAULT_GENERAL, **(s.get("general") or {})},
         "pix_mode": ({**DEFAULT_PIX, **(s.get("pix") or {})})["mode"],
@@ -736,33 +739,48 @@ async def create_subscription(body: SubscriptionCreateBody, user: dict = Depends
         raise HTTPException(400, "Você já possui uma assinatura ativa")
     if await db.subscriptions.find_one({"user_id": user["id"], "status": "pending_payment"}):
         raise HTTPException(400, "Você já tem uma assinatura aguardando pagamento. Pague na barbearia para ativá-la.")
-    settings = await db.settings.find_one({"id": "main"}, {"_id": 0})
-    plan = {**DEFAULT_PLAN, **(settings.get("plan") or {})}
-    if not plan.get("active", True):
-        raise HTTPException(400, "O plano Cliente Mensal não está disponível no momento")
-    price = plan["price"]
-    cuts = plan["cuts"]
-    # Every method (PIX, cartão, dinheiro) is paid at the shop and confirmed by the admin.
-    status = "pending_payment"
+    # Resolve the plan SERVER-SIDE. Prices/cuts/cycle always come from the DB, never from the client.
+    plan = None
+    if body.plan_id:
+        plan = await db.plans.find_one({"id": body.plan_id}, {"_id": 0})
+        if not plan or plan.get("archived") or not plan.get("active", True):
+            raise HTTPException(400, "Plano indisponível")
+    if not plan:  # default = cheapest active plan
+        plan = await db.plans.find_one({"active": True, "archived": {"$ne": True}}, {"_id": 0}, sort=[("price", 1)])
+    if not plan:  # legacy fallback (settings.plan) if plans collection is empty
+        settings = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
+        plan = {**DEFAULT_PLAN, **(settings.get("plan") or {})}
+        if not plan.get("active", True):
+            raise HTTPException(400, "O plano Cliente Mensal não está disponível no momento")
+    price = float(plan["price"])
+    cuts = int(plan["cuts"])
+    cycle_days = int(plan.get("cycle_days") or DEFAULT_PLAN["cycle_days"])
+    sid = str(uuid.uuid4())
+    # Every method (PIX, cartão, dinheiro) is confirmed at the shop by the admin (no simulated payment).
     sub = {
-        "id": str(uuid.uuid4()),
+        "id": sid,
         "user_id": user["id"],
         "client_name": user["name"],
         "client_phone": user["phone"],
+        "plan_id": plan.get("id"),
         "plan_name": plan["name"],
-        "plan_snapshot": plan,  # preserves the rules that applied to this cycle
+        "plan_snapshot": plan,  # preserves the exact terms agreed for this cycle
         "price": price,
         "cuts_total": cuts,
         "cuts_used": 0,
         "payment_method": body.payment_method,
-        "status": status,
+        "payment_status": "aguardando_pagamento" if body.payment_method == "pix" else "pendente_confirmacao",
+        "status": "pending_payment",
+        "txid": sid.replace("-", "")[:25],  # used to match an eventual PIX provider webhook
         "period_start": now_utc().isoformat(),
-        "period_end": (now_utc() + timedelta(days=plan["cycle_days"])).isoformat(),
+        "period_end": (now_utc() + timedelta(days=cycle_days)).isoformat(),
         "usage_history": [],
         "created_at": now_utc().isoformat(),
     }
     await db.subscriptions.insert_one(sub.copy())
     sub.pop("_id", None)
+    if body.payment_method == "pix":
+        sub["pix"] = await pix_for_subscription(db, sub)  # valid BR Code QR; stays pending until confirmed
     return sub
 
 
@@ -1138,6 +1156,27 @@ async def seed():
                 {"weekday": 5, "mode": "fila", "open_time": "09:00", "close_time": "18:00"},
                 {"weekday": 6, "mode": "fechado", "open_time": "09:00", "close_time": "18:00"},
             ],
+        })
+
+    # plans collection (multiple editable monthly plans). Non-destructive: migrate the legacy
+    # single plan (settings.plan) into the collection only when it is empty. Existing subscribers
+    # keep their own plan_snapshot, so their agreed terms are never changed.
+    if await db.plans.count_documents({}) == 0:
+        s_doc = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
+        base = {**DEFAULT_PLAN, **(s_doc.get("plan") or {})}
+        await db.plans.insert_one({
+            "id": str(uuid.uuid4()),
+            "name": base.get("name") or "Cliente Mensal",
+            "description": base.get("description") or "",
+            "price": float(base.get("price") or 0),
+            "cuts": int(base.get("cuts") or 4),
+            "cycle_days": int(base.get("cycle_days") or 30),
+            "rules": base.get("rules") or "",
+            "allowed_service_ids": base.get("allowed_service_ids") or [],
+            "active": base.get("active", True),
+            "archived": False,
+            "created_at": now_utc().isoformat(),
+            "migrated_from_settings": True,
         })
 
     # services

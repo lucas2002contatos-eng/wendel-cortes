@@ -7,7 +7,8 @@ import { api, clearSession } from "@/src/api";
 import { GhostButton, GoldButton } from "@/src/ui";
 import { refreshBranding } from "@/src/branding";
 import { ServicesSection } from "@/src/admin/services-section";
-import { BrandingSection, PlanSection, PixSection, PaymentsSection, GeneralSection, AuditSection, ResetCodesSection } from "@/src/admin/config-sections";
+import { PlansSection } from "@/src/admin/plans-section";
+import { BrandingSection, PixSection, PaymentsSection, GeneralSection, AuditSection, ResetCodesSection } from "@/src/admin/config-sections";
 
 export default function Mais() {
   const insets = useSafeAreaInsets();
@@ -88,7 +89,7 @@ export default function Mais() {
             { k: "branding", l: "Identidade Visual" },
             { k: "shop", l: "Informações" },
             { k: "services", l: "Serviços" },
-            { k: "plan", l: "Cliente Mensal" },
+            { k: "plan", l: "Planos Mensais" },
             { k: "team", l: "Equipe / Barbeiros" },
             { k: "payments", l: "Pagamentos" },
             { k: "pix", l: "PIX" },
@@ -214,7 +215,7 @@ export default function Mais() {
         )}
 
         {tab === "branding" && <BrandingSection />}
-        {tab === "plan" && settings && <PlanSection settings={settings} onSaved={load} />}
+        {tab === "plan" && <PlansSection onChanged={load} />}
         {tab === "pix" && settings && <PixSection settings={settings} onSaved={load} />}
         {tab === "payments" && <PaymentsSection />}
         {tab === "general" && settings && <GeneralSection settings={settings} onSaved={load} />}

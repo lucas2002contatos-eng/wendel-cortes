@@ -43,6 +43,7 @@ class PlanBody(BaseModel):
     rules: Optional[str] = ""
     allowed_service_ids: List[str] = []
     active: bool = True
+    archived: bool = False
 
 
 class SubscriptionAdjustBody(BaseModel):
@@ -234,7 +235,26 @@ def make_config_router(db, get_current_user, require_admin, require_staff, now_u
                 if a["id"].replace("-", "")[:25] == txid[:25]:
                     apt = a; break
         if not apt:
-            raise HTTPException(404, "Agendamento não encontrado para este txid")
+            # Not an appointment → try a pending PIX subscription (same compacted-id match).
+            sub = None
+            async for sb in db.subscriptions.find({"payment_method": "pix", "status": "pending_payment"}, {"_id": 0}):
+                cand = (sb.get("txid") or sb["id"].replace("-", ""))[:25]
+                if cand == txid[:25]:
+                    sub = sb
+                    break
+            if sub:
+                if not any(w in status for w in paid_words):
+                    await db.payment_events.insert_one({"id": str(uuid.uuid4()), "provider": provider, "subscription_id": sub["id"], "status": status, "payload": payload, "at": now_utc().isoformat()})
+                    return {"ok": True, "ignored": f"status '{status}' não é pagamento aprovado"}
+                cycle_days = (sub.get("plan_snapshot") or {}).get("cycle_days") or DEFAULT_PLAN["cycle_days"]
+                spatch = {"status": "active", "payment_status": "pago", "period_start": now_utc().isoformat(),
+                          "period_end": (now_utc() + timedelta(days=cycle_days)).isoformat(),
+                          "paid_at": now_utc().isoformat(), "paid_confirmed_by": f"webhook:{provider}"}
+                await db.subscriptions.update_one({"id": sub["id"]}, {"$set": spatch})
+                await db.payment_events.insert_one({"id": str(uuid.uuid4()), "provider": provider, "subscription_id": sub["id"], "status": status, "payload": payload, "at": now_utc().isoformat()})
+                await audit({"id": "system", "name": f"Webhook {provider}", "role": "system"}, "subscription.webhook.paid", "subscription", sub["id"], {"status": "pending_payment"}, spatch)
+                return {"ok": True, "subscription_id": sub["id"], "status": "active"}
+            raise HTTPException(404, "Agendamento ou assinatura não encontrado para este txid")
         if not any(w in status for w in paid_words):
             await db.payment_events.insert_one({"id": str(uuid.uuid4()), "provider": provider, "appointment_id": apt["id"], "status": status, "payload": payload, "at": now_utc().isoformat()})
             return {"ok": True, "ignored": f"status '{status}' não é pagamento aprovado"}
@@ -256,6 +276,92 @@ def make_config_router(db, get_current_user, require_admin, require_staff, now_u
         return {"payment_status": apt.get("payment_status"), "status": apt["status"]}
 
     # -------------------------------------------------------------- plan ---
+    async def _ensure_plans():
+        """Lazily migrate the legacy single plan (settings.plan) into the plans collection."""
+        if await db.plans.count_documents({}) == 0:
+            s = await settings_doc()
+            base = {**DEFAULT_PLAN, **(s.get("plan") or {})}
+            await db.plans.insert_one({
+                "id": str(uuid.uuid4()),
+                "name": base.get("name") or "Cliente Mensal",
+                "description": base.get("description") or "",
+                "price": float(base.get("price") or 0),
+                "cuts": int(base.get("cuts") or 4),
+                "cycle_days": int(base.get("cycle_days") or 30),
+                "rules": base.get("rules") or "",
+                "allowed_service_ids": base.get("allowed_service_ids") or [],
+                "active": base.get("active", True),
+                "archived": False,
+                "created_at": now_utc().isoformat(),
+                "migrated_from_settings": True,
+            })
+
+    @r.get("/plans")
+    async def list_plans(user: dict = Depends(get_current_user)):
+        """Clients see active, non-archived plans; the founder admin sees every plan."""
+        await _ensure_plans()
+        items = await db.plans.find({}, {"_id": 0}).sort("price", 1).to_list(200)
+        if user["role"] != "admin":
+            items = [p for p in items if p.get("active", True) and not p.get("archived")]
+        return items
+
+    @r.post("/admin/plans")
+    async def create_plan(body: PlanBody, user: dict = Depends(require_admin)):
+        await _ensure_plans()
+        doc = body.model_dump()
+        doc["id"] = str(uuid.uuid4())
+        doc["created_at"] = now_utc().isoformat()
+        await db.plans.insert_one(doc.copy())
+        doc.pop("_id", None)
+        await audit(user, "plan.create", "plan", doc["id"], None, doc)
+        return doc
+
+    @r.put("/admin/plans/{pid}")
+    async def update_plan_item(pid: str, body: PlanBody, user: dict = Depends(require_admin)):
+        before = await db.plans.find_one({"id": pid}, {"_id": 0})
+        if not before:
+            raise HTTPException(404, "Plano não encontrado")
+        await db.plans.update_one({"id": pid}, {"$set": body.model_dump()})
+        after = await db.plans.find_one({"id": pid}, {"_id": 0})
+        # Existing subscribers keep their own plan_snapshot, so this edit never changes agreed terms.
+        await audit(user, "plan.update", "plan", pid, before, after)
+        return after
+
+    @r.delete("/admin/plans/{pid}")
+    async def delete_plan_item(pid: str, user: dict = Depends(require_admin)):
+        """Delete when safe; plans that already have subscribers are archived (history preserved)."""
+        plan = await db.plans.find_one({"id": pid}, {"_id": 0})
+        if not plan:
+            raise HTTPException(404, "Plano não encontrado")
+        used = await db.subscriptions.count_documents({"plan_id": pid})
+        if used:
+            await db.plans.update_one({"id": pid}, {"$set": {"archived": True, "active": False}})
+            await audit(user, "plan.archive", "plan", pid, plan, {"archived": True, "active": False})
+            return {"ok": True, "archived": True, "message": f"Plano possui {used} assinante(s) e foi arquivado em vez de excluído (histórico preservado)."}
+        await db.plans.delete_one({"id": pid})
+        await audit(user, "plan.delete", "plan", pid, plan, None)
+        return {"ok": True, "archived": False}
+
+    @r.get("/subscription/{sid}/pix")
+    async def subscription_pix(sid: str, user: dict = Depends(get_current_user)):
+        sub = await db.subscriptions.find_one({"id": sid}, {"_id": 0})
+        if not sub:
+            raise HTTPException(404, "Assinatura não encontrada")
+        if user["role"] == "client" and sub["user_id"] != user["id"]:
+            raise HTTPException(403, "Não autorizado")
+        return await pix_for_subscription(db, sub)
+
+    @r.get("/subscription/{sid}/payment-status")
+    async def subscription_payment_status(sid: str, user: dict = Depends(get_current_user)):
+        sub = await db.subscriptions.find_one({"id": sid}, {"_id": 0, "status": 1, "user_id": 1, "payment_status": 1})
+        if not sub:
+            raise HTTPException(404, "Assinatura não encontrada")
+        if user["role"] == "client" and sub["user_id"] != user["id"]:
+            raise HTTPException(403, "Não autorizado")
+        paid = sub["status"] == "active"
+        return {"payment_status": "pago" if paid else (sub.get("payment_status") or "aguardando_pagamento"), "status": sub["status"]}
+
+    # ----------------------------------------------- legacy single plan ---
     @r.put("/admin/plan")
     async def update_plan(body: PlanBody, user: dict = Depends(require_admin)):
         s = await settings_doc()
@@ -447,3 +553,21 @@ async def pix_for_appointment(db, apt: dict) -> dict:
     payload = build_pix_payload(normalize_pix_key(key, key_type), amount, holder, pix.get("city") or "SAO PAULO", txid=apt["id"].replace("-", "")[:25], description=apt.get("service_name", ""))
     return {"available": True, "payload": payload, "amount": amount, "key": key, "key_type": key_type, "holder_name": holder,
             "source": source, "expires_min": general["pix_expires_min"], "payment_status": apt.get("payment_status")}
+
+
+async def pix_for_subscription(db, sub: dict) -> dict:
+    """Resolve the shop PIX key and build a valid BR Code payload for a monthly subscription."""
+    s = await db.settings.find_one({"id": "main"}, {"_id": 0}) or {}
+    pix = {**DEFAULT_PIX, **(s.get("pix") or {})}
+    general = {**DEFAULT_GENERAL, **(s.get("general") or {})}
+    shop_name = ((s.get("shop") or {}).get("name")) or "WENDEL CORTES"
+    key, key_type, holder = pix["key"], pix["key_type"], pix["holder_name"] or shop_name
+    if not key:
+        return {"available": False, "reason": "Chave PIX ainda não configurada pela barbearia."}
+    amount = float(sub.get("price") or 0)
+    txid = (sub.get("txid") or sub["id"].replace("-", ""))[:25]
+    payload = build_pix_payload(normalize_pix_key(key, key_type), amount, holder, pix.get("city") or "SAO PAULO", txid=txid, description=sub.get("plan_name", "Assinatura"))
+    paid = sub.get("status") == "active"
+    return {"available": True, "payload": payload, "amount": amount, "key": key, "key_type": key_type, "holder_name": holder,
+            "source": "shop", "expires_min": general["pix_expires_min"],
+            "payment_status": "pago" if paid else (sub.get("payment_status") or "aguardando_pagamento")}

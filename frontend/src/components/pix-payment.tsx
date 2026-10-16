@@ -12,16 +12,17 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /** Valid PIX BR Code (EMV) rendered as QR + "Copia e Cola". */
-export function PixPayment({ pix, apt, onDone }: { pix: any; apt: any; onDone?: () => void }) {
+export function PixPayment({ pix, apt, statusUrl, onDone }: { pix: any; apt: any; statusUrl?: string; onDone?: () => void }) {
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<string>(pix?.payment_status || "aguardando_pagamento");
   useEffect(() => {
-    if (!apt?.id || status === "pago") return;
+    const url = statusUrl || (apt?.id ? `/appointments/${apt.id}/payment-status` : null);
+    if (!url || status === "pago") return;
     const t = setInterval(async () => {
-      try { const r = await api(`/appointments/${apt.id}/payment-status`); if (r.payment_status) setStatus(r.payment_status); } catch {}
+      try { const r = await api(url); if (r.payment_status) setStatus(r.payment_status); } catch {}
     }, 5000);
     return () => clearInterval(t);
-  }, [apt?.id, status]);
+  }, [statusUrl, apt?.id, status]);
   const copy = async () => {
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined" && navigator.clipboard) await navigator.clipboard.writeText(pix.payload);
@@ -46,8 +47,8 @@ export function PixPayment({ pix, apt, onDone }: { pix: any; apt: any; onDone?: 
       <View style={styles.card} testID="pix-paid">
         <Icon name="check-circle" size={48} color={colors.brandPrimary} />
         <Text style={styles.title}>Pagamento confirmado!</Text>
-        <Text style={styles.sub}>R$ {Number(pix.amount).toFixed(2)} · {apt?.service_name}{apt?.barber_name ? ` com ${apt.barber_name}` : ""}. Seu horário está garantido.</Text>
-        {onDone && <GoldButton testID="pix-done-btn" label="Ver meus agendamentos" onPress={onDone} style={{ marginTop: spacing.lg, alignSelf: "stretch" }} />}
+        <Text style={styles.sub}>R$ {Number(pix.amount).toFixed(2)} · {apt?.service_name}{apt?.barber_name ? ` com ${apt.barber_name}` : ""}. {apt?.date ? "Seu horário está garantido." : "Sua assinatura está ativa."}</Text>
+        {onDone && <GoldButton testID="pix-done-btn" label={apt?.date ? "Ver meus agendamentos" : "Ver minha assinatura"} onPress={onDone} style={{ marginTop: spacing.lg, alignSelf: "stretch" }} />}
       </View>
     );
   }
