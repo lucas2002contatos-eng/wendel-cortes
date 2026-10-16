@@ -4,7 +4,7 @@ import pytest
 import requests
 from datetime import date, timedelta
 
-BASE = "https://cortes-agendamentos.preview.emergentagent.com/api"
+BASE = "https://wendel-web-app.preview.emergentagent.com/api"
 
 @pytest.fixture(scope="module")
 def admin_token():

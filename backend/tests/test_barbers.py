@@ -17,7 +17,7 @@ import pytest
 import requests
 from datetime import date, datetime, timedelta
 
-BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://cortes-agendamentos.preview.emergentagent.com").rstrip("/") + "/api"
+BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://wendel-web-app.preview.emergentagent.com").rstrip("/") + "/api"
 
 
 def H(t):

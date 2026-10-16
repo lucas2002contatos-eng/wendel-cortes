@@ -15,7 +15,7 @@ import requests
 import jwt as pyjwt
 import pytest
 
-BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://cortes-agendamentos.preview.emergentagent.com").rstrip("/") + "/api"
+BASE = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://wendel-web-app.preview.emergentagent.com").rstrip("/") + "/api"
 
 
 # ---------- helpers ----------
